@@ -2,6 +2,21 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — kostra Workeru stojí a ověřená
+
+Doména: stačí `fio-uhrady.bass443.workers.dev`, vlastní zatím ne.
+
+**Hotové a ověřené lokálně:**
+- `wrangler.jsonc` (D1 binding `DB`, cron `*/15`, observability, `GIT_COMMIT` var), `package.json`, `tsconfig.json`.
+- `src/index.ts` — `/api/version`, `/api/health`; `/admin/*` a `/v/*` zatím poctivě vrací 503 „nepostaveno".
+- `schema/0001_init.sql` — 7 tabulek, pustěno proti **lokální** D1, tabulky sedí.
+- `npm run typecheck` prochází; `wrangler dev` odpověděl `{"commit":"dev"}` a `{"db":"ok"}`.
+- `scripts/deploy.mjs` — otiskne krátký hash commitu do `/api/version`, odmítne špinavý strom.
+
+**Nenasazeno.** Ostrá D1 nevytvořená (`database_id` ve wrangler.jsonc je placeholder), Access nenastavený.
+
+**Další krok:** sonda `node scripts/fio-probe.mjs` s read-only Fio tokenem — potvrdit `column25`.
+
 ## 2026-08-19 — zadání a návrh
 
 Cíl: přehled uhrazeno / dlužno proti reálným pohybům na účtu Fio banky. Dvě stránky — admin za 2FA a read-only přehled s grafem a exportem.

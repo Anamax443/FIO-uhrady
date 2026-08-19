@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fio-uhrady",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-19",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 }
+  },
+
+  // Přepisuje se při nasazení: wrangler deploy --var GIT_COMMIT:<hash> (viz scripts/deploy.mjs)
+  "vars": {
+    "GIT_COMMIT": "dev"
+  },
+
+  // Vytvořit: wrangler d1 create fio-uhrady → vrácené database_id doplnit sem.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fio-uhrady",
+      "database_id": "PLACEHOLDER-doplnit-po-d1-create"
+    }
+  ],
+
+  // Stahování pohybů z Fio. Limit Fio API je 1 dotaz / 30 s — 15 minut je s rezervou.
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  }
+
+  // FIO_TOKEN je secret: wrangler secret put FIO_TOKEN (lokálně .dev.vars)
+}
