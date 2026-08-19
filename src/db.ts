@@ -110,6 +110,102 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
 const naznak = (token: string): string =>
   token.length <= 6 ? '••••' : '••••••' + token.slice(-4);
 
+/** Celý token — jen pro volání Fio API, nikdy ne do stránky. */
+export async function nactiFioToken(db: D1Database): Promise<string | null> {
+  const row = await db
+    .prepare("select hodnota from settings where klic = 'fio_token'")
+    .first<{ hodnota: string }>();
+  return row?.hodnota ?? null;
+}
+
+export interface Platba {
+  fio_id: string;
+  datum: string;
+  castka: number;
+  mena: string;
+  vs: string | null;
+  protiucet: string | null;
+  protiucet_nazev: string | null;
+  zprava: string | null;
+  komentar: string | null;
+  member_id: number | null;
+  jmeno: string | null;
+  matched_by: string | null;
+  matched_value: string | null;
+}
+
+export async function nactiPlatby(db: D1Database, limit = 200): Promise<Platba[]> {
+  const { results } = await db
+    .prepare(
+      `select p.fio_id, p.datum, p.castka, p.mena, p.vs, p.protiucet, p.protiucet_nazev,
+              p.zprava, p.komentar, p.member_id, p.matched_by, p.matched_value, m.jmeno
+         from payments p left join members m on m.id = p.member_id
+        order by p.datum desc, p.fio_id desc limit ?`,
+    )
+    .bind(limit)
+    .all<Platba>();
+  return results;
+}
+
+export interface Beh {
+  zacatek: string;
+  konec: string | null;
+  stav: string;
+  detail: string | null;
+  novych: number;
+  sparovanych: number;
+}
+
+export async function posledniBeh(db: D1Database): Promise<Beh | null> {
+  return await db
+    .prepare('select zacatek, konec, stav, detail, novych, sparovanych from sync_runs order by id desc limit 1')
+    .first<Beh>();
+}
+
+/** Ruční přiřazení platby osobě. Automatický běh ho už nepřepíše. */
+export async function priradPlatbu(
+  db: D1Database,
+  fio_id: string,
+  member_id: number | null,
+  kdo: string,
+): Promise<void> {
+  const pred = await db
+    .prepare('select fio_id, castka, datum, member_id, matched_by from payments where fio_id = ?')
+    .bind(fio_id)
+    .first<{ castka: number; datum: string; member_id: number | null }>();
+  if (pred === null) throw new ChybaVstupu('Platba neexistuje.');
+
+  let jmeno: string | null = null;
+  if (member_id !== null) {
+    const osoba = await db
+      .prepare('select jmeno from members where id = ?')
+      .bind(member_id)
+      .first<{ jmeno: string }>();
+    if (osoba === null) throw new ChybaVstupu('Osoba neexistuje.');
+    jmeno = osoba.jmeno;
+  }
+
+  await db.batch([
+    db
+      .prepare(
+        `update payments set member_id = ?, matched_by = ?, matched_value = null where fio_id = ?`,
+      )
+      .bind(member_id, member_id === null ? null : 'rucne', fio_id),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'platba',
+      fio_id,
+      member_id === null
+        ? `Zrušeno přiřazení platby ${(pred.castka / 100).toFixed(0)} Kč z ${pred.datum}`
+        : `Platba ${(pred.castka / 100).toFixed(0)} Kč z ${pred.datum} ručně přiřazena osobě ${jmeno}`,
+      pred,
+      { member_id, matched_by: 'rucne' },
+    ),
+  ]);
+}
+
 export async function nactiAudit(db: D1Database, limit = 50) {
   const { results } = await db
     .prepare('select cas, kdo, akce, entita, entita_id, popis from audit_log order by id desc limit ?')

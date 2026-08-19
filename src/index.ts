@@ -11,17 +11,23 @@ import { renderNaklady } from './admin-page.js';
 import {
   ChybaVstupu,
   nactiAudit,
+  nactiFioToken,
+  nactiPlatby,
   nactiNastaveni,
   nactiOsoby,
   nactiPrehled,
   overPolozku,
   smazPolozku,
   ulozFioToken,
+  posledniBeh,
+  priradPlatbu,
   ulozPolozku,
   ulozIdentifikaci,
 } from './db.js';
 import { popisDruhu, popisPeriody } from './money.js';
+import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
+import { synchronizuj } from './sync.js';
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data, null, 2), {
@@ -187,8 +193,49 @@ export default {
           return html(renderNastaveni(osoby, nastaveni, audit, kdo, env.GIT_COMMIT ?? 'dev'));
         }
 
+        if (request.method === 'GET' && path === '/admin/uhrady') {
+          const [platby, osoby, beh, nastaveni] = await Promise.all([
+            nactiPlatby(env.DB),
+            nactiOsoby(env.DB),
+            posledniBeh(env.DB),
+            nactiNastaveni(env.DB),
+          ]);
+          return html(
+            renderUhrady(
+              platby,
+              osoby,
+              beh,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+              nastaveni.nazev_domu,
+              nastaveni.fio_token_naznak !== null,
+            ),
+          );
+        }
+
         if (request.method === 'GET' && path === '/admin/export.csv') {
           return exportCsv(await nactiPrehled(env.DB));
+        }
+
+        if (request.method === 'POST' && path === '/api/sync') {
+          const token = await nactiFioToken(env.DB);
+          if (token === null) {
+            throw new ChybaVstupu('Není uložený token do Fio — vlož ho v Nastavení.');
+          }
+          const nastaveni = await nactiNastaveni(env.DB);
+          const vysledek = await synchronizuj(env.DB, token, nastaveni.sync_window_days);
+          return json({ ok: true, ...vysledek });
+        }
+
+        if (request.method === 'POST' && path === '/api/platba/prirad') {
+          const data = (await telo(request)) as { fio_id?: string; member_id?: number | null };
+          await priradPlatbu(
+            env.DB,
+            String(data.fio_id ?? ''),
+            data.member_id === null || data.member_id === undefined ? null : Number(data.member_id),
+            kdo,
+          );
+          return json({ ok: true });
         }
 
         if (request.method === 'POST' && path === '/api/polozka') {
@@ -257,9 +304,20 @@ export default {
     return json({ chyba: 'Neznámá cesta', cesta: path }, 404);
   },
 
-  async scheduled(_event: ScheduledController, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Sem přijde stahování z Fio (periods/ + dedup podle ID pohybu) a matcher.
-    // Nestavím to dřív, než sonda potvrdí, na kterých polích se dá stavět.
-    console.log(JSON.stringify({ udalost: 'cron', stav: 'sync zatím nepostaven' }));
+  async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const token = await nactiFioToken(env.DB);
+    if (token === null) {
+      // Není to selhání — appka jen čeká, až někdo vloží token v Nastavení.
+      console.log(JSON.stringify({ udalost: 'cron', stav: 'čeká na token do Fio' }));
+      return;
+    }
+    try {
+      const nastaveni = await nactiNastaveni(env.DB);
+      const vysledek = await synchronizuj(env.DB, token, nastaveni.sync_window_days);
+      console.log(JSON.stringify({ udalost: 'cron', stav: 'ok', ...vysledek }));
+    } catch (err) {
+      // Podrobnost je i v sync_runs, tohle je jen stopa v logu Workeru.
+      console.error(JSON.stringify({ udalost: 'cron', stav: 'chyba', detail: String(err) }));
+    }
   },
 } satisfies ExportedHandler<Env>;

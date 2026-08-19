@@ -191,7 +191,7 @@ export const SYMBOLY = `
 <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.2" cy="5.2" r="2.8"/><path d="m7.2 7.2 6 6M11.2 11.2l-1.4 1.4M13.2 9.2l-1.4 1.4"/></symbol>
 </defs></svg>`;
 
-type Stranka = 'naklady' | 'nastaveni';
+type Stranka = 'naklady' | 'uhrady' | 'nastaveni';
 
 interface Polozka {
   klic: Stranka | null;
@@ -204,7 +204,7 @@ const MENU: Polozka[] = [
   { klic: null, href: null, ikona: 'i-grid', popis: 'Přehled' },
   { klic: 'naklady', href: '/admin', ikona: 'i-list', popis: 'Náklady domu' },
   { klic: null, href: null, ikona: 'i-users', popis: 'Osoby' },
-  { klic: null, href: null, ikona: 'i-bank', popis: 'Úhrady z Fio' },
+  { klic: 'uhrady', href: '/admin/uhrady', ikona: 'i-bank', popis: 'Úhrady z Fio' },
   { klic: null, href: null, ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
 ];
 
