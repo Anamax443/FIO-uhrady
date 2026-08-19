@@ -8,16 +8,23 @@
 -- u každé položky liší (Lucka s dědou, Eliška s dědou, máma s Luckou),
 -- takže pevné skupiny by nefungovaly.
 --
--- `vs` je variabilní symbol, kterým se poznají platby té osoby v pohybech z Fio.
--- Může chybět (kdo platí hotově, v bance se nikdy neobjeví). Spravuje se
--- v Nastavení → Identifikace plateb.
+-- Rozdělení nákladů je kalkulace: ukazuje, co dům stojí a na koho co padá.
+-- Na účet ale reálně posílá peníze jen někdo — `je_platce`. Jeho platby se
+-- poznají podle `ucet` (číslo protiúčtu z pohybu) nebo `vs`, a promítnou se
+-- do jeho dlužné částky. Spravuje se v Nastavení → Identifikace plateb.
+-- `pod_member_id`: čí podíl se počítá někomu jinému. Nezletilé dítě má vlastní
+-- podíl (ať je vidět, co stojí), ale závazek nese rodič. Jen jedna úroveň —
+-- na koho se to počítá, ten už pod nikým dalším být nesmí.
 create table if not exists members (
-  id         integer primary key autoincrement,
-  jmeno      text    not null unique,
-  vs         text    unique,
-  aktivni    integer not null default 1,
-  poznamka   text,
-  created_at text    not null default (datetime('now'))
+  id            integer primary key autoincrement,
+  jmeno         text    not null unique,
+  je_platce     integer not null default 0,
+  ucet          text,                     -- '1234567890/0800' — nepovinný doplněk k VS
+  vs            text    unique,           -- variabilní symbol; hlavní znak, může poslat odkudkoli
+  pod_member_id integer references members(id) on delete set null,
+  aktivni       integer not null default 1,
+  poznamka      text,
+  created_at    text    not null default (datetime('now'))
 );
 
 -- === Náklady domu ===

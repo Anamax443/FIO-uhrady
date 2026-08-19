@@ -205,7 +205,7 @@ const MENU: Polozka[] = [
   { klic: 'naklady', href: '/admin', ikona: 'i-list', popis: 'Náklady domu' },
   { klic: null, href: null, ikona: 'i-users', popis: 'Osoby' },
   { klic: null, href: null, ikona: 'i-bank', popis: 'Úhrady z Fio' },
-  { klic: null, href: null, ikona: 'i-doc', popis: 'Předpisy a dluhy' },
+  { klic: null, href: null, ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
 ];
 
 const MENU_SPRAVA: Polozka[] = [
@@ -227,6 +227,8 @@ export interface Shell {
   aktivni: Stranka;
   nazevDomu: string;
   titulek: string;
+  /** krátký hash nasazeného commitu — ať jde živá verze ověřit proti gitu */
+  commit: string;
   /** obsah titulní lišty mezi značkou a pravým okrajem */
   listaExtra?: string;
   vpravo?: string;
@@ -256,6 +258,8 @@ ${SYMBOLY}
     ${s.listaExtra ?? ''}
     <span class="spacer"></span>
     ${s.vpravo ?? ''}
+    <span class="chip mono" id="hodiny" title="čas prohlížeče, běží živě">--:--:--</span>
+    <span class="chip mono" title="nasazený commit — dá se ověřit proti gitu">${esc(s.commit)}</span>
   </header>
 
   <div class="backdrop" id="backdrop"></div>
@@ -281,6 +285,12 @@ burger.addEventListener('click', () => {
 });
 document.getElementById('backdrop').addEventListener('click', zavriMenu);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') zavriMenu(); });
+
+// Běžící čas v hlavičce: hned a pak každou vteřinu, ať je poznat, že stránka žije.
+const hodiny = document.getElementById('hodiny');
+const tik = () => { hodiny.textContent = new Date().toLocaleTimeString('cs-CZ'); };
+tik();
+setInterval(tik, 1000);
 </script>
 ${s.skript ?? ''}
 </body>

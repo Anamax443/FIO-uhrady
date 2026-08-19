@@ -38,8 +38,10 @@ interface RadekPodilu {
 
 export async function nactiOsoby(db: D1Database): Promise<Osoba[]> {
   const { results } = await db
-    .prepare('select id, jmeno, vs from members where aktivni = 1 order by id')
-    .all<Osoba & { vs: string | null }>();
+    .prepare(
+      'select id, jmeno, je_platce, ucet, vs, pod_member_id from members where aktivni = 1 order by id',
+    )
+    .all<Osoba>();
   return results;
 }
 
@@ -317,20 +319,50 @@ export async function smazPolozku(db: D1Database, id: number, kdo: string): Prom
   ]);
 }
 
-/** Identifikace plateb: kterým VS se pozná která osoba. */
-export async function ulozVS(
+export interface Identifikace {
+  je_platce: boolean;
+  vs: string | null;
+  ucet: string | null;
+  /** komu se podíl téhle osoby počítá (nezletilé dítě → rodič) */
+  pod_member_id: number | null;
+}
+
+/**
+ * Podle čeho se pozná něčí příspěvek na účtu.
+ *
+ * Hlavní znak je **VS** — s ním může poslat peníze odkudkoli, i z cizího účtu.
+ * Číslo účtu je nepovinný doplněk pro případ, že VS v příkazu chybí.
+ */
+export async function ulozIdentifikaci(
   db: D1Database,
   member_id: number,
-  vs: string | null,
+  vstup: Identifikace,
   kdo: string,
 ): Promise<void> {
   const pred = await db
-    .prepare('select id, jmeno, vs from members where id = ?')
+    .prepare('select id, jmeno, je_platce, vs, ucet, pod_member_id from members where id = ?')
     .bind(member_id)
-    .first<{ jmeno: string; vs: string | null }>();
+    .first<{
+      jmeno: string;
+      je_platce: number;
+      vs: string | null;
+      ucet: string | null;
+      pod_member_id: number | null;
+    }>();
   if (pred === null) throw new ChybaVstupu('Osoba neexistuje.');
+
+  const vs = vstup.vs;
   if (vs !== null && !/^\d{1,10}$/.test(vs)) {
     throw new ChybaVstupu('Variabilní symbol smí být jen číslo, nejvýš 10 číslic.');
+  }
+  const ucet = vstup.ucet;
+  if (ucet !== null && !/^(\d{1,6}-)?\d{2,10}\/\d{4}$/.test(ucet)) {
+    throw new ChybaVstupu('Číslo účtu čekám ve tvaru 1234567890/0800 (předčíslí s pomlčkou je volitelné).');
+  }
+  if (vstup.je_platce && vs === null && ucet === null) {
+    throw new ChybaVstupu(
+      `${pred.jmeno} posílá příspěvky na účet, ale nemá podle čeho je poznat — vyplň VS (a případně číslo účtu).`,
+    );
   }
 
   const kolize =
@@ -342,19 +374,58 @@ export async function ulozVS(
           .first<{ jmeno: string }>();
   if (kolize) throw new ChybaVstupu(`VS ${vs} už používá ${kolize.jmeno}.`);
 
+  // Jen jedna úroveň: pod koho se to počítá, ten už sám pod nikým být nesmí,
+  // jinak by závazek putoval po řetězu a nikdo by se v tom nevyznal.
+  const pod = vstup.pod_member_id;
+  let jmenoRodice: string | null = null;
+  if (pod !== null) {
+    if (pod === member_id) throw new ChybaVstupu('Osoba se nemůže počítat sama sobě.');
+    const rodic = await db
+      .prepare('select jmeno, pod_member_id from members where id = ?')
+      .bind(pod)
+      .first<{ jmeno: string; pod_member_id: number | null }>();
+    if (rodic === null) throw new ChybaVstupu('Osoba, ke které se to má počítat, neexistuje.');
+    if (rodic.pod_member_id !== null) {
+      throw new ChybaVstupu(`${rodic.jmeno} se sám počítá někomu jinému — vyber někoho, kdo závazek nese.`);
+    }
+    jmenoRodice = rodic.jmeno;
+
+    const deti = await db
+      .prepare('select jmeno from members where pod_member_id = ? limit 1')
+      .bind(member_id)
+      .first<{ jmeno: string }>();
+    if (deti) {
+      throw new ChybaVstupu(`${pred.jmeno} nese závazek za ${deti.jmeno}, takže se nemůže počítat ještě někomu.`);
+    }
+  }
+
+  const po = {
+    jmeno: pred.jmeno,
+    je_platce: vstup.je_platce ? 1 : 0,
+    vs,
+    ucet,
+    pod_member_id: pod,
+  };
   await db.batch([
-    db.prepare('update members set vs = ? where id = ?').bind(vs, member_id),
+    db
+      .prepare('update members set je_platce = ?, vs = ?, ucet = ?, pod_member_id = ? where id = ?')
+      .bind(po.je_platce, vs, ucet, pod, member_id),
     auditStatement(
       db,
       kdo,
       'zmena',
       'osoba',
       String(member_id),
-      vs === null
-        ? `Zrušen variabilní symbol u osoby ${pred.jmeno}`
-        : `Nastaven variabilní symbol ${vs} osobě ${pred.jmeno}`,
+      [
+        vstup.je_platce
+          ? `${pred.jmeno} posílá příspěvky na účet — VS ${vs ?? 'nenastaven'}${ucet ? `, účet ${ucet}` : ''}`
+          : `${pred.jmeno} příspěvky na účet neposílá`,
+        jmenoRodice ? `podíl se počítá ${jmenoRodice}` : null,
+      ]
+        .filter(Boolean)
+        .join('; '),
       pred,
-      { jmeno: pred.jmeno, vs },
+      po,
     ),
   ]);
 }

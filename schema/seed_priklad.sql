@@ -6,11 +6,15 @@
 -- Variabilní symboly jsou vymyšlené, přepiš je v Nastavení na skutečné.
 -- Pustit až po 0001_init.sql. Opakované spuštění nic nezduplikuje.
 
-insert or ignore into members (id, jmeno, vs) values
-  (1, 'máma',   '2131'),
-  (2, 'děda',   null),
-  (3, 'Lucka',  '2133'),
-  (4, 'Eliška', '2134');
+-- Na účet posílá jen Lucka; ostatním se počítá podíl na nákladech, ale
+-- v bance se neobjeví. VS je hlavní znak, takže může poslat odkudkoli.
+-- Eliška je nezletilá: podíl se jí počítá zvlášť (ať je vidět, co stojí),
+-- ale závazek nese máma.
+insert or ignore into members (id, jmeno, je_platce, vs, pod_member_id) values
+  (1, 'máma',   0, null,   null),
+  (2, 'děda',   0, null,   null),
+  (3, 'Lucka',  1, '2133', null),
+  (4, 'Eliška', 0, null,   1);
 
 -- Pravidelné náklady
 insert or ignore into cost_items (id, nazev, kategorie, castka_celkem, perioda, druh, hradi_member_id, poznamka) values

@@ -9,11 +9,26 @@ import type { Druh, Perioda, Podil } from './money.js';
 
 export type { Podil };
 
+/**
+ * Osoba, na kterou se dělí náklady. Rozdělení je kalkulace — ukazuje,
+ * co dům stojí a na koho co padá.
+ *
+ * Peníze na účet ale reálně posílá jen někdo (`je_platce`). Jeho příspěvky
+ * se poznají podle čísla účtu nebo VS a porovnají se s jeho podílem.
+ */
 export interface Osoba {
   id: number;
   jmeno: string;
-  /** variabilní symbol, kterým se poznají platby té osoby; null = neplatí přes účet */
+  je_platce?: number;
+  /** nepovinný doplněk k VS */
+  ucet?: string | null;
+  /** variabilní symbol — hlavní znak, s ním může poslat odkudkoli */
   vs?: string | null;
+  /**
+   * Komu se podíl téhle osoby počítá. Nezletilé dítě má vlastní podíl,
+   * ať je vidět, co stojí — ale závazek nese rodič.
+   */
+  pod_member_id?: number | null;
 }
 
 export interface Polozka {

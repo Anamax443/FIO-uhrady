@@ -18,7 +18,7 @@ import {
   smazPolozku,
   ulozFioToken,
   ulozPolozku,
-  ulozVS,
+  ulozIdentifikaci,
 } from './db.js';
 import { popisDruhu, popisPeriody } from './money.js';
 import { renderNastaveni } from './settings-page.js';
@@ -175,7 +175,7 @@ export default {
       try {
         if (request.method === 'GET' && path === '/admin') {
           const prehled = await nactiPrehled(env.DB);
-          return html(renderNaklady(prehled, new Date().toLocaleDateString('cs-CZ'), kdo));
+          return html(renderNaklady(prehled, new Date().toLocaleDateString('cs-CZ'), kdo, env.GIT_COMMIT ?? 'dev'));
         }
 
         if (request.method === 'GET' && path === '/admin/nastaveni') {
@@ -184,7 +184,7 @@ export default {
             nactiNastaveni(env.DB),
             nactiAudit(env.DB, 20),
           ]);
-          return html(renderNastaveni(osoby, nastaveni, audit, kdo));
+          return html(renderNastaveni(osoby, nastaveni, audit, kdo, env.GIT_COMMIT ?? 'dev'));
         }
 
         if (request.method === 'GET' && path === '/admin/export.csv') {
@@ -202,10 +202,31 @@ export default {
           return json({ ok: true });
         }
 
-        if (request.method === 'POST' && path === '/api/vs') {
-          const data = (await telo(request)) as { zmeny?: { member_id: number; vs: string | null }[] };
+        if (request.method === 'POST' && path === '/api/identifikace') {
+          const data = (await telo(request)) as {
+            zmeny?: {
+              member_id: number;
+              je_platce: boolean;
+              vs: string | null;
+              ucet: string | null;
+              pod_member_id: number | null;
+            }[];
+          };
           for (const z of data.zmeny ?? []) {
-            await ulozVS(env.DB, Number(z.member_id), z.vs === null ? null : String(z.vs).trim(), kdo);
+            await ulozIdentifikaci(
+              env.DB,
+              Number(z.member_id),
+              {
+                je_platce: Boolean(z.je_platce),
+                vs: z.vs === null ? null : String(z.vs).trim(),
+                ucet: z.ucet === null ? null : String(z.ucet).trim(),
+                pod_member_id:
+                  z.pod_member_id === null || z.pod_member_id === undefined
+                    ? null
+                    : Number(z.pod_member_id),
+              },
+              kdo,
+            );
           }
           return json({ ok: true });
         }

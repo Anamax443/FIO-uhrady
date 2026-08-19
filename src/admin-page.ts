@@ -89,6 +89,7 @@ const STYL = `
 .list { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
 .detail { display: flex; flex-direction: column; min-width: 0; overflow-y: auto; background: var(--chrome-hi); }
 table { min-width: 760px; }
+.osoba small { display: block; font-weight: 400; font-size: 10px; color: var(--text-faint); }
 .col-per { width: 108px; color: var(--text-dim); }
 .col-druh { width: 104px; color: var(--text-dim); }
 .col-stav { width: 116px; }
@@ -143,7 +144,14 @@ function grid(prehled: Prehled, s: Souhrn): string {
     </div>`;
   }
 
-  const hlavicky = prehled.osoby.map((o) => `<th class="osoba col-num">${esc(o.jmeno)}</th>`).join('');
+  const hlavicky = prehled.osoby
+    .map((o) => {
+      const rodic = prehled.osoby.find((x) => x.id === (o.pod_member_id ?? null));
+      return `<th class="osoba col-num" title="${
+        rodic ? `podíl nese ${esc(rodic.jmeno)}` : 'nese svůj podíl sám'
+      }">${esc(o.jmeno)}${rodic ? `<small>s ${esc(rodic.jmeno)}</small>` : ''}</th>`;
+    })
+    .join('');
 
   const radky = s.radky
     .map((r, i) => {
@@ -207,7 +215,7 @@ function grid(prehled: Prehled, s: Souhrn): string {
         <td></td>
       </tr>
       <tr>
-        <td>Jednorázové saldo <span class="pozn">(do dlužné částky)</span></td><td></td><td></td><td></td>
+        <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td>
         <td class="col-num${s.saldoCelkem < 0 ? ' minus' : ''}">${formatKcZnamenko(s.saldoCelkem)}</td>
         ${soucty(s.saldoOsoba, true)}
         <td></td>
@@ -274,13 +282,26 @@ function detail(prehled: Prehled): string {
 </section>`;
 }
 
-export function renderNaklady(prehled: Prehled, datum: string, kdo: string): string {
+export function renderNaklady(prehled: Prehled, datum: string, kdo: string, commit: string): string {
   const s = spocitej(prehled);
 
+  // Kdo se počítá někomu jinému (nezletilé dítě), nemá vlastní závazek —
+  // jeho podíl se přičte tomu, kdo ho nese. Ve sloupci zůstane vidět zvlášť.
+  const zavazek = (o: Osoba, mapa: Map<number, number>): number => {
+    let soucet = mapa.get(o.id) ?? 0;
+    for (const d of prehled.osoby) {
+      if ((d.pod_member_id ?? null) === o.id) soucet += mapa.get(d.id) ?? 0;
+    }
+    return soucet;
+  };
+
   const stavOsob = prehled.osoby
+    .filter((o) => (o.pod_member_id ?? null) === null)
     .map((o: Osoba) => {
-      const saldo = s.saldoOsoba.get(o.id) ?? 0;
-      return `<span>${esc(o.jmeno)} <b>${formatKc(s.mesicneOsoba.get(o.id) ?? 0)}</b>/měs${
+      const deti = prehled.osoby.filter((d) => (d.pod_member_id ?? null) === o.id);
+      const saldo = zavazek(o, s.saldoOsoba);
+      const popis = deti.length > 0 ? `${o.jmeno} (s ${deti.map((d) => d.jmeno).join(', ')})` : o.jmeno;
+      return `<span>${esc(popis)} <b>${formatKc(zavazek(o, s.mesicneOsoba))}</b>/měs${
         saldo !== 0 ? ` <span class="saldo">${formatKcZnamenko(saldo)}</span>` : ''
       }</span>`;
     })
@@ -323,7 +344,7 @@ export function renderNaklady(prehled: Prehled, datum: string, kdo: string): str
   const status = `
     <span>Pravidelné <b>${formatKc(s.mesicneCelkem)}</b>/měs</span>
     <span>ročně <b>${formatKc(s.rocneCelkem)}</b></span>
-    <span>jednorázové saldo <b>${formatKcZnamenko(s.saldoCelkem)}</b></span>
+    <span>jednorázové <b>${formatKcZnamenko(s.saldoCelkem)}</b></span>
     ${stavOsob}
     ${s.nedokoncenych > 0 ? `<span class="warn">nedokončených <b>${s.nedokoncenych}</b></span>` : ''}
     <span class="spacer"></span>
@@ -380,7 +401,7 @@ function prepocitej() {
   const zn = druh === 'preplatek' ? -1 : 1;
   const del = DELITEL[el('d-perioda').value] || 0;
   el('d-dopad').innerHTML = jedno
-    ? '<span>Dopad do dlužné částky</span><b>' + kcZn(zn * celkem) + '</b>'
+    ? '<span>Promítne se do vyrovnání</span><b>' + kcZn(zn * celkem) + '</b>'
     : '<span>Měsíčně z toho</span><b>' + kc(del ? Math.round(celkem / del) : 0) + '</b>';
 
   return { celkem: celkem, podily: podily };
@@ -516,6 +537,7 @@ ukazPolozku(vybraneId);
     aktivni: 'naklady',
     nazevDomu: prehled.nazev_domu,
     titulek: 'Náklady domu',
+    commit,
     listaExtra: `<div class="search">
       <svg class="icon icon-sm"><use href="#i-search"/></svg>
       <input id="filtr" type="search" placeholder="Filtr položek…" autocomplete="off" />
