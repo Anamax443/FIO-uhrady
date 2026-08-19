@@ -27,10 +27,15 @@
     }
   ],
 
-  // Stahování pohybů z Fio. Limit Fio API je 1 dotaz / 30 s — 15 minut je s rezervou.
-  "triggers": {
-    "crons": ["*/15 * * * *"]
-  }
+  // Stahování pohybů z Fio: limit Fio API je 1 dotaz / 30 s, 15 minut je s rezervou.
+  //
+  // VYPNUTO: účet bass443 má vyčerpaný free limit 5 cron triggerů na účet
+  // (Cloudflare error 10072 při nasazení 2026-08-19). Než se sync zapne, je
+  // potřeba buď Workers Paid, nebo uvolnit cron u jiného Workeru. Do té doby
+  // půjde stahování spustit ručně z admina.
+  // "triggers": {
+  //   "crons": ["*/15 * * * *"]
+  // }
 
   // FIO_TOKEN je secret: wrangler secret put FIO_TOKEN (lokálně .dev.vars)
 }
