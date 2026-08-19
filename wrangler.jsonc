@@ -12,7 +12,10 @@
 
   // Přepisuje se při nasazení: wrangler deploy --var GIT_COMMIT:<hash> (viz scripts/deploy.mjs)
   "vars": {
-    "GIT_COMMIT": "dev"
+    "GIT_COMMIT": "dev",
+    // Únik do adminu jen pro lokální vývoj; v kódu navíc platí pouze na localhostu.
+    // V produkci zůstává "0" a admin pustí jedině Cloudflare Access.
+    "DEV_ADMIN": "0"
   },
 
   // Vytvořit: wrangler d1 create fio-uhrady → vrácené database_id doplnit sem.

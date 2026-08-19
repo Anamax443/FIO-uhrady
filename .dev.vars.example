@@ -1,3 +1,6 @@
 # Zkopíruj na .dev.vars a vyplň. .dev.vars je v .gitignore — reálný token nikdy do gitu.
 # Read-only token se zakládá v internetbankingu Fio: Nastavení → API.
 FIO_TOKEN=
+
+# Jen pro lokální vývoj: pustí do /admin bez Cloudflare Access (platí pouze na localhostu).
+DEV_ADMIN=1
