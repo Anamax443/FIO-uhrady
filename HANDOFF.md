@@ -2,6 +2,25 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — ŽIVĚ na Cloudflare
+
+**https://fio-uhrady.bass443.workers.dev** — nasazeno, commit `34f0fdd`.
+
+- D1 `fio-uhrady` (region EEUR, id `7f116705-6320-4ea2-9f89-5722800d8efa`), schéma nahrané.
+  **Databáze je prázdná** — ukázková data se nenasazují sama; kdo je chce, pustí
+  `npx wrangler d1 execute fio-uhrady --remote --file schema/seed_priklad.sql`.
+- Ověřeno naživo: `/api/version` vrací `34f0fdd` (sedí s gitem), `/api/health` hlásí `db: ok`,
+  `/admin` vrací **403** — Cloudflare Access ještě není nastavený a aplikace je fail-closed.
+- V hlavičce běží čas a je vidět nasazený commit.
+
+**BLOKUJE:**
+1. **Cloudflare Access** na `/admin` — bez něj se do správy nedostane nikdo (ani vlastník).
+   Zero Trust → Access → Applications → aplikace na `fio-uhrady.bass443.workers.dev/admin`.
+2. **Cron trigger nenasazen** — účet bass443 má vyčerpaný free limit **5 cron triggerů na účet**
+   (Cloudflare error 10072). V `wrangler.jsonc` je proto zakomentovaný. Před zapnutím syncu z Fio
+   je potřeba buď Workers Paid, nebo uvolnit cron u jiného Workeru; do té doby se bude
+   stahování spouštět ručně z admina.
+
 ## 2026-08-19 — admin napojený na databázi, nastavení s VS, audit
 
 Admin už nekreslí ukázková data — čte a zapisuje do D1.
