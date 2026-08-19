@@ -152,21 +152,58 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media (max-width: 1180px) { .search input { width: 130px; } }
 
-/* úzké okno a mobil: menu je výsuvné */
+/* úzké okno a mobil: menu je výsuvné a stránka se scrolluje jako celek.
+   Snaha vecpat dva panely do 100vh na telefonu dopadne tak, že se obsah
+   ořízne a nedá se k němu dostat — proto tu výška ustoupí. */
 @media (max-width: 860px) {
-  .app { grid-template-columns: 1fr; grid-template-areas: "title" "main" "status"; }
+  html, body { height: auto; }
+  .app {
+    height: auto; min-height: 100vh;
+    grid-template-columns: 1fr;
+    grid-template-rows: 33px auto auto;
+    grid-template-areas: "title" "main" "status";
+  }
   .burger { display: inline-flex; }
-  .titlebar .field, .titlebar .chip, .titlebar .sep { display: none; }
-  .search { flex: 1; }
+  .titlebar { position: sticky; top: 0; z-index: 20; }
+  .titlebar .field, .titlebar .sep { display: none; }
+  .titlebar .chip { display: none; }
+  .search { flex: 1; min-width: 0; }
   .search input { width: 100%; }
+  .brand .org { display: none; }
+
   .nav {
-    position: fixed; top: 33px; bottom: 23px; left: 0; width: 214px; z-index: 30;
+    position: fixed; top: 33px; bottom: 0; left: 0; width: 214px; z-index: 30;
     transform: translateX(-100%); transition: transform .14s ease-out; box-shadow: var(--shadow);
   }
   .app[data-nav="open"] .nav { transform: none; }
-  .app[data-nav="open"] .backdrop { display: block; position: fixed; inset: 33px 0 23px; z-index: 25; background: rgba(0, 0, 0, .34); }
-  .navitem { height: 34px; }
-  .status { font-size: 11px; }
+  .app[data-nav="open"] .backdrop { display: block; position: fixed; inset: 33px 0 0 0; z-index: 25; background: rgba(0, 0, 0, .34); }
+  .navitem { height: 38px; }
+
+  .main { display: block; }
+  .gridwrap { overflow-x: auto; }
+  .status { flex-wrap: wrap; gap: 2px 0; padding: 5px 9px; font-size: 11px; }
+  .status > span { border-right: 0; padding: 0 10px 0 0; }
+  .status .spacer { display: none; }
+}
+
+/* telefon: tabulka po sloupcích se přečíst nedá, každý řádek je karta */
+@media (max-width: 560px) {
+  table, thead, tbody, tfoot, tr, td { display: block; width: auto; }
+  thead { display: none; }
+  table { min-width: 0; }
+  tbody tr { padding: 7px 9px; border-bottom: 1px solid var(--border); }
+  tbody tr:nth-child(even) { background: transparent; }
+  tbody td { height: auto; padding: 1px 0; white-space: normal; text-align: left; border: 0; }
+  tbody td:empty { display: none; }
+  tbody td[data-popis]::before {
+    content: attr(data-popis) ": ";
+    color: var(--text-dim);
+  }
+  tbody tr[data-selected="true"] td:first-child { box-shadow: none; }
+  tbody tr[data-selected="true"] { box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-soft); }
+  tfoot tr { padding: 7px 9px; border-top: 2px solid var(--border); background: var(--head); }
+  tfoot td { position: static; height: auto; padding: 1px 0; border: 0; }
+  .col-num { text-align: left; }
 }
 `;
 

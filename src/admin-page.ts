@@ -130,16 +130,24 @@ table { min-width: 760px; }
 .zaznam .detail-zmeny { color: var(--text-dim); }
 
 @media (max-width: 860px) {
-  .main { grid-template-columns: 1fr; grid-template-rows: minmax(180px, 1fr) auto; overflow: hidden; }
-  .list { border-right: 0; min-height: 0; }
-  .detail { border-top: 1px solid var(--border); max-height: 54vh; }
+  /* Nic se nepere o výšku — seznam a pod ním detail, stránka se scrolluje. */
+  .main { display: block; }
+  .list { border-right: 0; }
+  .detail { border-top: 1px solid var(--border); overflow: visible; }
+  .detail .foot { position: static; }
+  table { min-width: 640px; }
 }
 @media (max-width: 560px) {
-  thead th.osoba, td.osoba-cell { display: none; }
   table { min-width: 0; }
-  .col-druh, .col-per { width: auto; }
-  .podil { grid-template-columns: minmax(0, 1fr) 76px 58px 68px; }
-  .detail { max-height: 60vh; }
+  .col-druh, .col-per, .col-stav { width: auto; }
+  /* Nuly by kartu jen zaplevelily — kdo se nepodílí, prostě není vidět.
+     Stejně tak „Druh: pravidelný" u každé položky; zůstanou jen výjimky. */
+  tbody td.osoba-cell.zero, tbody td.col-druh.bezny { display: none; }
+  tbody td.col-num { font-size: 12.5px; }
+  .nazev { font-size: 13.5px; }
+  .podil { grid-template-columns: minmax(0, 1fr) 74px 56px; row-gap: 2px; }
+  .podil .vysledek { grid-column: 2 / -1; text-align: left; }
+  .frow2 { grid-template-columns: 1fr; }
 }
 </style>`;
 
@@ -167,7 +175,7 @@ function grid(prehled: Prehled, s: Souhrn): string {
         .map((o) => {
           const v = r.naOsobu.get(o.id) ?? 0;
           const text = v === 0 ? '—' : r.jednorazovy ? formatKcZnamenko(v) : formatKc(v);
-          return `<td class="col-num osoba-cell${v === 0 ? ' zero' : ''}${v < 0 ? ' minus' : ''}">${text}</td>`;
+          return `<td class="col-num osoba-cell${v === 0 ? ' zero' : ''}${v < 0 ? ' minus' : ''}" data-popis="${esc(o.jmeno)}">${text}</td>`;
         })
         .join('');
 
@@ -183,14 +191,14 @@ function grid(prehled: Prehled, s: Souhrn): string {
 
       return `<tr data-id="${p.id}"${i === 0 ? ' data-selected="true"' : ''} tabindex="0">
   <td class="nazev">${esc(p.nazev)}${p.poznamka ? ` <span class="pozn">— ${esc(p.poznamka)}</span>` : ''}</td>
-  <td class="col-druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
-  <td class="col-per">${esc(kdy)}</td>
-  <td class="col-num">${p.castka_celkem === 0 ? '—' : formatKc(p.castka_celkem)}</td>
-  <td class="col-num${r.castka < 0 ? ' minus' : ''}">${
+  <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
+  <td class="col-per" data-popis="Kdy">${esc(kdy)}</td>
+  <td class="col-num" data-popis="Za období">${p.castka_celkem === 0 ? '—' : formatKc(p.castka_celkem)}</td>
+  <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně">${
     r.castka === 0 ? '—' : r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)
   }</td>
   ${bunky}
-  <td class="col-stav">${stav}</td>
+  <td class="col-stav" data-popis="Stav">${stav}</td>
 </tr>`;
     })
     .join('\n');

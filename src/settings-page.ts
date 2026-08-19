@@ -45,6 +45,18 @@ const STYL = `
   .radek[data-platce="false"] input { display: none; }
   .audit .kdo { display: none; }
 }
+
+/* Telefon: nic nesmí přetéct doprava, jinak se text ořízne uprostřed slova. */
+@media (max-width: 560px) {
+  .panel .telo { max-width: 100%; padding: 10px 9px 12px; }
+  .vysvetleni { max-width: 100%; overflow-wrap: anywhere; }
+  .radek { grid-template-columns: 1fr; gap: 4px; }
+  .radek > * { min-width: 0; }
+  /* Zaškrtávátko se roztáhnout nesmí — jinak odskočí od svého popisku. */
+  .radek input:not([type="checkbox"]), .radek select { width: 100%; }
+  .tokenradek { flex-direction: column; align-items: stretch; }
+  .tokenradek input { width: 100%; }
+}
 </style>`;
 
 export function renderNastaveni(
