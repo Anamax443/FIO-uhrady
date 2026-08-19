@@ -9,6 +9,17 @@
  */
 import { renderNaklady } from './admin-page.js';
 import {
+  kdoZeCookie,
+  maPin,
+  overPin,
+  stavBloku,
+  vymazNeuspechy,
+  vytvorCookie,
+  zapisNeuspech,
+  zrusCookie,
+} from './auth.js';
+import { prihlasovaciStranka } from './login-page.js';
+import {
   ChybaVstupu,
   nactiAudit,
   nactiFioToken,
@@ -61,8 +72,13 @@ async function adminIdentita(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<string | null> {
+  // Access dává skutečnou identitu (e-mail) — ta je v auditu k něčemu.
   const identita = await ctx.access?.getIdentity();
   if (identita) return identita.email ?? identita.name ?? 'přihlášen přes Access';
+
+  // Záloha: přihlášení PINem, drží ho podepsaná cookie s platností.
+  const zCookie = await kdoZeCookie(env.DB, request.headers.get('cookie'));
+  if (zCookie !== null) return zCookie;
 
   const host = new URL(request.url).hostname;
   // Přes `String()`, protože typ z wrangler.jsonc je literál "0" a porovnání by neprošlo.
@@ -72,6 +88,9 @@ async function adminIdentita(
   }
   return null;
 }
+
+const adresa = (request: Request): string =>
+  request.headers.get('cf-connecting-ip') ?? request.headers.get('x-real-ip') ?? 'neznámá';
 
 const denied = (): Response =>
   html(
@@ -168,12 +187,72 @@ export default {
       }
     }
 
+    // Přihlášení je veřejné — musí jít otevřít i bez platné cookie.
+    if (path === '/admin/prihlaseni' && request.method === 'GET') {
+      const blok = await stavBloku(env.DB, adresa(request));
+      return html(
+        prihlasovaciStranka(
+          env.GIT_COMMIT ?? 'dev',
+          blok.blokovano ? 'Příliš mnoho pokusů. Zkus to za chvíli.' : null,
+          blok.blokovano ? blok.zbyvaSekund : 0,
+        ),
+      );
+    }
+
+    if (path === '/api/prihlaseni' && request.method === 'POST') {
+      const ip = adresa(request);
+      const blok = await stavBloku(env.DB, ip);
+      if (blok.blokovano) {
+        return html(
+          prihlasovaciStranka(
+            env.GIT_COMMIT ?? 'dev',
+            `Přihlášení je zamčené ještě ${Math.ceil(blok.zbyvaSekund / 60)} min.`,
+            blok.zbyvaSekund,
+          ),
+          429,
+        );
+      }
+
+      const formular = await request.formData();
+      const pin = String(formular.get('pin') ?? '');
+      if (await overPin(env.DB, pin)) {
+        await vymazNeuspechy(env.DB, ip);
+        return new Response(null, {
+          status: 303,
+          headers: { location: '/admin', 'set-cookie': await vytvorCookie(env.DB, `PIN (${ip})`) },
+        });
+      }
+
+      await zapisNeuspech(env.DB, ip);
+      const poChybe = await stavBloku(env.DB, ip);
+      return html(
+        prihlasovaciStranka(
+          env.GIT_COMMIT ?? 'dev',
+          poChybe.blokovano
+            ? `Špatný PIN. Další pokus až za ${Math.ceil(poChybe.zbyvaSekund / 60)} min.`
+            : 'Špatný PIN.',
+          poChybe.blokovano ? poChybe.zbyvaSekund : 0,
+        ),
+        401,
+      );
+    }
+
+    if (path === '/api/odhlaseni' && request.method === 'POST') {
+      return new Response(null, { status: 303, headers: { location: '/', 'set-cookie': zrusCookie() } });
+    }
+
     const jeAdmin = path === '/admin' || path.startsWith('/admin/');
     const jeApi = path.startsWith('/api/');
 
     if (jeAdmin || jeApi) {
       const kdo = await adminIdentita(request, env, ctx);
-      if (kdo === null) return jeApi ? json({ chyba: 'Nepřihlášeno.' }, 403) : denied();
+      if (kdo === null) {
+        if (jeApi) return json({ chyba: 'Nepřihlášeno.' }, 403);
+        // Když je nastavený PIN, pošli člověka na přihlášení; jinak vysvětli Access.
+        return (await maPin(env.DB))
+          ? new Response(null, { status: 302, headers: { location: '/admin/prihlaseni' } })
+          : denied();
+      }
 
       if (request.method === 'POST' && cizihoPuvodu(request, url)) {
         return json({ chyba: 'Požadavek nepřišel z této aplikace.' }, 403);
