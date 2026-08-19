@@ -2,6 +2,39 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — banka napojená, přihlášení PINem, živý provoz
+
+**https://fio-uhrady.bass443.workers.dev** — commit `fa1e32c`.
+
+**Napojení na Fio ověřené proti reálnému účtu** (3 pohyby, běh syncu):
+VS v příkazu → přiřazeno podle VS; VS chybí a je dopsaný v komentáři u pohybu →
+přiřazeno z komentáře; ani jedno → zůstane nepřiřazené a čeká na ruční přiřazení.
+Tím padla poslední nepotvrzená domněnka celého návrhu.
+
+- `src/fio.ts` + `src/sync.ts` — `periods/` s překryvem, dedup podle ID pohybu,
+  každý běh (i prázdný, i spadlý) v `sync_runs` se srozumitelným popisem.
+  Ruční přiřazení (`matched_by = 'rucne'`) automatický běh nepřepíše.
+- Stránka **Úhrady z Fio** — co přišlo, komu to patří a **čím** se to poznalo.
+- **Přihlášení PINem** (`src/auth.ts`) jako záloha, když není Access. PIN se neukládá,
+  jen otisk PBKDF2 (100k iterací) se solí; po 5 chybách zámek na 15 min, po 10 na hodinu;
+  cookie podepsaná HMAC, platnost 12 h. Access má dál přednost — dává e-mail do auditu.
+  PIN se mění `node scripts/set-pin.mjs <pin>` → SQL do D1.
+- Kořen `/` je veřejný rozcestník, ne holá věta.
+
+**Ověřeno na živé adrese:** `/admin` bez přihlášení 302 → `/admin/prihlaseni`,
+špatný PIN 401, správný 303 + cookie, `/admin` s cookie 200.
+
+**Ostrá databáze je prázdná** (schéma + PIN, žádná data). Výplň volitelně:
+`npx wrangler d1 execute fio-uhrady --remote --file schema/seed_priklad.sql`.
+
+**Další v pořadí (zadané, nepostavené):**
+1. **Resend + e-maily** — u každé osoby e-mail a příznak *admin*; rozesílá se celkové
+   vyúčtování za všechny, nebo jen za ty, které admin vybere.
+2. **Stránka pro Lucku** — měsíční závazek, jeho vývoj v čase, historie a **QR platba**
+   (SPAYD; potřebuje číslo účtu domácnosti v nastavení).
+3. **MFA jako volba v Nastavení** (dvoufaktor k PINu).
+4. Import CSV zpátky, předpisy a porovnání „kolik měla × kolik zaplatila".
+
 ## 2026-08-19 — ŽIVĚ na Cloudflare
 
 **https://fio-uhrady.bass443.workers.dev** — nasazeno, commit `34f0fdd`.
