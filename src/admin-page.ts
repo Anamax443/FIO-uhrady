@@ -121,6 +121,13 @@ table { min-width: 760px; }
 .dopad b { color: var(--text); }
 .detail .foot { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-top: 1px solid var(--border); background: var(--chrome); position: sticky; bottom: 0; flex-wrap: wrap; }
 .detail .hlaska { margin: 0; border-bottom: 0; border-top: 1px solid var(--border); }
+.historie { display: flex; flex-direction: column; gap: 7px; }
+.zaznam { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); }
+.zaznam:last-child { border-bottom: 0; }
+.zaznam .hlava { display: flex; gap: 8px; justify-content: space-between; color: var(--text-dim); }
+.zaznam .kdy { font-family: var(--mono); font-size: 11.5px; }
+.zaznam .co { color: var(--text); }
+.zaznam .detail-zmeny { color: var(--text-dim); }
 
 @media (max-width: 860px) {
   .main { grid-template-columns: 1fr; grid-template-rows: minmax(180px, 1fr) auto; overflow: hidden; }
@@ -272,6 +279,9 @@ function detail(prehled: Prehled): string {
     <div class="zbytek" id="d-zbytek"><span>Nerozděleno</span><b>0 Kč</b></div>
     <div class="dopad" id="d-dopad"></div>
     <span class="note">Odškrtnutá osoba se na položce nepodílí. Zbytek se nikam neschová — zůstane vidět tady i v seznamu.</span>
+
+    <div class="subhead">Historie změn</div>
+    <div class="historie" id="d-historie"><span class="note">—</span></div>
   </div>
   <div class="hlaska" id="d-hlaska" hidden></div>
   <div class="foot">
@@ -430,6 +440,30 @@ function ukazPolozku(id) {
   }
   hlaska('', '');
   prepocitej();
+  void nactiHistorii(p.id);
+}
+
+// Kdo, kdy a co změnil. Bere se z auditu, který vzniká u každého zápisu.
+async function nactiHistorii(id) {
+  const cil = el('d-historie');
+  if (id === null) { cil.innerHTML = '<span class="note">Nová položka — zatím bez historie.</span>'; return; }
+  cil.innerHTML = '<span class="note">načítám…</span>';
+  try {
+    const odpoved = await fetch('/api/polozka/' + id + '/historie');
+    const data = await odpoved.json();
+    const zmeny = data.zmeny || [];
+    if (zmeny.length === 0) { cil.innerHTML = '<span class="note">Zatím beze změn.</span>'; return; }
+    cil.innerHTML = zmeny
+      .map((z) =>
+        '<div class="zaznam"><div class="hlava"><span class="kdy">' + z.cas + '</span><span>' + z.kdo + '</span></div>' +
+        '<span class="co">' + z.popis + '</span>' +
+        (z.zmeny && z.zmeny.length ? '<span class="detail-zmeny">' + z.zmeny.join(' · ') + '</span>' : '') +
+        '</div>',
+      )
+      .join('');
+  } catch (e) {
+    cil.innerHTML = '<span class="note">Historii se nepodařilo načíst: ' + e.message + '</span>';
+  }
 }
 
 async function posli(url, telo) {

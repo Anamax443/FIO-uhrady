@@ -221,6 +221,66 @@ export async function nactiAudit(db: D1Database, limit = 50) {
   return results;
 }
 
+export interface ZmenaPolozky {
+  cas: string;
+  kdo: string;
+  akce: string;
+  popis: string;
+  /** co se konkrétně změnilo, lidsky: „částka 299 Kč → 349 Kč" */
+  zmeny: string[];
+}
+
+const POPIS_POLE: Record<string, string> = {
+  nazev: 'název',
+  kategorie: 'kategorie',
+  castka_celkem: 'částka',
+  perioda: 'perioda',
+  druh: 'druh',
+  datum: 'datum',
+  poznamka: 'poznámka',
+  hradi_member_id: 'kdo platí',
+};
+
+const jakoText = (klic: string, v: unknown): string => {
+  if (v === null || v === undefined || v === '') return '—';
+  if (klic === 'castka_celkem') return `${(Number(v) / 100).toLocaleString('cs-CZ')} Kč`;
+  return String(v);
+};
+
+/** Historie jedné položky — kdo, kdy a co přesně změnil. */
+export async function historiePolozky(db: D1Database, id: number, limit = 20): Promise<ZmenaPolozky[]> {
+  const { results } = await db
+    .prepare(
+      `select cas, kdo, akce, popis, pred, po from audit_log
+        where entita = 'polozka' and entita_id = ? order by id desc limit ?`,
+    )
+    .bind(String(id), limit)
+    .all<{ cas: string; kdo: string; akce: string; popis: string; pred: string | null; po: string | null }>();
+
+  return results.map((z) => {
+    const zmeny: string[] = [];
+    if (z.pred !== null && z.po !== null) {
+      try {
+        const pred = JSON.parse(z.pred) as Record<string, unknown>;
+        const po = JSON.parse(z.po) as Record<string, unknown>;
+        for (const [klic, popis] of Object.entries(POPIS_POLE)) {
+          const a = pred[klic] ?? null;
+          const b = po[klic] ?? null;
+          if (String(a ?? '') !== String(b ?? '')) {
+            zmeny.push(`${popis}: ${jakoText(klic, a)} → ${jakoText(klic, b)}`);
+          }
+        }
+        if (JSON.stringify(pred['podily'] ?? []) !== JSON.stringify(po['podily'] ?? [])) {
+          zmeny.push('změněno rozdělení mezi osoby');
+        }
+      } catch {
+        // Nečitelný záznam historii nezruší — popis zůstává.
+      }
+    }
+    return { cas: z.cas, kdo: z.kdo, akce: z.akce, popis: z.popis, zmeny };
+  });
+}
+
 /* ---------- zápis ---------- */
 
 /** Data z formuláře po ověření — do databáze nejde nic nezkontrolovaného. */
@@ -324,10 +384,20 @@ export async function ulozPolozku(
   vstup: VstupPolozky,
   kdo: string,
 ): Promise<number> {
+  // Do „před" patří i rozdělení mezi osoby — jinak by z historie nešlo poznat,
+  // že se změnilo, kdo se na položce skládá.
   const pred =
     vstup.id === null
       ? null
-      : await db.prepare('select * from cost_items where id = ?').bind(vstup.id).first();
+      : await (async () => {
+          const radek = await db.prepare('select * from cost_items where id = ?').bind(vstup.id).first();
+          if (radek === null) return null;
+          const { results } = await db
+            .prepare('select member_id, rezim, hodnota from cost_shares where cost_item_id = ?')
+            .bind(vstup.id)
+            .all<Podil>();
+          return { ...radek, podily: results };
+        })();
 
   let id = vstup.id;
   if (id === null) {

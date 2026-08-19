@@ -21,6 +21,7 @@ import {
 import { prihlasovaciStranka } from './login-page.js';
 import {
   ChybaVstupu,
+  historiePolozky,
   nactiAudit,
   nactiFioToken,
   nactiPlatby,
@@ -316,6 +317,11 @@ export default {
             kdo,
           );
           return json({ ok: true });
+        }
+
+        const historie = path.match(/^\/api\/polozka\/(\d+)\/historie$/);
+        if (request.method === 'GET' && historie?.[1]) {
+          return json({ zmeny: await historiePolozky(env.DB, Number(historie[1])) });
         }
 
         if (request.method === 'POST' && path === '/api/polozka') {
