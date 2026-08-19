@@ -149,6 +149,25 @@ export function renderNastaveni(
     </section>
 
     <section class="panel">
+      <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg>Sledování příspěvků v čase</div>
+      <div class="telo">
+        <p class="vysvetleni">
+          Příspěvek se platí <b>každý měsíc</b>. Od zadaného počátku se přičítá jeden měsíční podíl
+          za každý měsíc, který je <b>už po splatnosti</b> — do dne splatnosti se běžící měsíc
+          nepočítá, protože ještě není co dlužit.
+        </p>
+        <div class="tokenradek">
+          <label for="od">Sledovat od</label>
+          <input type="text" id="od" class="mono" style="width:110px" value="${esc(nastaveni.vyuctovani_od)}" placeholder="RRRR-MM" />
+          <label for="den">Splatnost dne</label>
+          <input type="text" id="den" class="mono" style="width:60px" inputmode="numeric" value="${nastaveni.den_splatnosti}" />
+          <button class="btn primary" type="button" id="ulozit-sledovani">Uložit</button>
+          <span class="note" id="sledovani-stav"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
       <div class="panehead"><svg class="icon icon-sm"><use href="#i-key"/></svg>Připojení k Fio bance</div>
       <div class="telo">
         <p class="vysvetleni">
@@ -221,6 +240,13 @@ el('ulozit-identifikaci').addEventListener('click', async () => {
   if (vysledek.ok) { location.reload(); return; }
   const stav = document.querySelector('[data-stav]');
   if (stav) { stav.textContent = vysledek.chyba; stav.className = 'stav chyba'; }
+});
+
+el('ulozit-sledovani').addEventListener('click', async () => {
+  el('sledovani-stav').textContent = 'ukládám…';
+  const vysledek = await posli('/api/sledovani', { od: el('od').value.trim(), den: el('den').value.trim() });
+  if (vysledek.ok) { location.reload(); return; }
+  el('sledovani-stav').textContent = vysledek.chyba;
 });
 
 el('ulozit-token').addEventListener('click', async () => {

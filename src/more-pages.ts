@@ -31,22 +31,39 @@ export interface RadekVyrovnani {
   sledovat: boolean;
 }
 
-/** Počet měsíců od 'YYYY-MM' do teď včetně. Nikdy méně než 1. */
-export function pocetMesicu(odMesice: string, ted = new Date()): number {
+/**
+ * Kolik měsíčních příspěvků je **už po splatnosti**.
+ *
+ * Měsíc se započítá až dnem splatnosti (default 20.). Do té doby ještě není
+ * co dlužit — jinak by appka hlásila dluh hned prvního, což by nebyla pravda.
+ * Když je počátek sledování v budoucnu, vyjde nula.
+ */
+export function pocetMesicu(odMesice: string, denSplatnosti = 20, ted = new Date()): number {
   const shoda = odMesice.match(/^(\d{4})-(\d{2})$/);
-  if (!shoda?.[1] || !shoda[2]) return 1;
-  const rozdil =
-    (ted.getFullYear() - Number(shoda[1])) * 12 + (ted.getMonth() + 1 - Number(shoda[2])) + 1;
-  return Math.max(1, rozdil);
+  if (!shoda?.[1] || !shoda[2]) return 0;
+  const celeMesice =
+    (ted.getFullYear() - Number(shoda[1])) * 12 + (ted.getMonth() + 1 - Number(shoda[2]));
+  const tentoMesicSplatny = ted.getDate() >= denSplatnosti ? 1 : 0;
+  return Math.max(0, celeMesice + tentoMesicSplatny);
 }
+
+/** Nejbližší den splatnosti od dneška — co se ukazuje jako „další úhrada". */
+export function dalsiSplatnost(denSplatnosti: number, ted = new Date()): Date {
+  const letos = new Date(ted.getFullYear(), ted.getMonth(), denSplatnosti);
+  if (letos >= new Date(ted.getFullYear(), ted.getMonth(), ted.getDate())) return letos;
+  return new Date(ted.getFullYear(), ted.getMonth() + 1, denSplatnosti);
+}
+
+const datumCesky = (d: Date): string => d.toLocaleDateString('cs-CZ');
 
 export function vyrovnani(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
   odMesice: string,
+  denSplatnosti = 20,
 ): { radky: RadekVyrovnani[]; mesicu: number } {
   const s = spocitej(prehled);
-  const mesicu = pocetMesicu(odMesice);
+  const mesicu = pocetMesicu(odMesice, denSplatnosti);
 
   const sectiSDetmi = (o: Osoba, mapa: Map<number, number>): number => {
     let soucet = mapa.get(o.id) ?? 0;
@@ -99,13 +116,14 @@ export function renderPrehled(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
   odMesice: string,
+  denSplatnosti: number,
   beh: Beh | null,
   nepriraze: number,
   kdo: string,
   commit: string,
 ): string {
   const s = spocitej(prehled);
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice, denSplatnosti);
   // Dluh se sčítá jen u těch, od koho příspěvky na účet opravdu chodí.
   const dluzi = radky.filter((r) => r.sledovat).reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
@@ -308,10 +326,11 @@ export function renderVyrovnani(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
   odMesice: string,
+  denSplatnosti: number,
   kdo: string,
   commit: string,
 ): string {
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice, denSplatnosti);
 
   const blok = (r: RadekVyrovnani): string => {
     const stav = !r.sledovat
@@ -375,27 +394,20 @@ export function renderVyrovnani(
         jen narůstal a nic by neznamenal, protože se skládají mimo účet.
       </p>
       <div class="obdobi">
-        <label for="od">Vyúčtování od</label>
-        <input type="text" id="od" value="${esc(odMesice)}" placeholder="RRRR-MM" style="width:110px" class="mono" />
-        <button class="btn" type="button" id="uloz-od">Uložit období</button>
-        <span class="note" id="stav"></span>
+        <span>Sledováno od <b class="mono">${esc(odMesice)}</b></span>
+        <span>· splatnost <b>${denSplatnosti}.</b> dne v měsíci</span>
+        <span>· příští úhrada <b>${datumCesky(dalsiSplatnost(denSplatnosti))}</b></span>
+        <a class="btn" href="/admin/nastaveni">Změnit v Nastavení</a>
       </div>
+      <p class="vysvetleni">
+        Měsíc se do dlužné částky započítá <b>až dnem splatnosti</b> — do té doby ještě není co dlužit.
+        Teď je po splatnosti ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}.
+      </p>
       ${bloky || '<p class="vysvetleni">Zatím tu není nikdo, komu by se dal spočítat podíl.</p>'}
     </div>
   </div>`;
 
-  const skript = `<script>
-document.getElementById('uloz-od').addEventListener('click', async () => {
-  const stav = document.getElementById('stav');
-  stav.textContent = 'ukládám…';
-  const odpoved = await fetch('/api/vyuctovani-od', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ od: document.getElementById('od').value.trim() }),
-  });
-  const data = await odpoved.json().catch(() => ({}));
-  if (odpoved.ok) location.reload(); else stav.textContent = data.chyba || 'Nepovedlo se uložit.';
-});
-</script>`;
+
 
   const celkem = sledovani.reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
@@ -406,7 +418,6 @@ document.getElementById('uloz-od').addEventListener('click', async () => {
     commit,
     obsah,
     status: `<span>období od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
-    skript,
   });
 }
 

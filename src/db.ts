@@ -15,6 +15,8 @@ export interface Nastaveni {
   sync_window_days: number;
   /** od kterého měsíce se počítají příspěvky, 'YYYY-MM' */
   vyuctovani_od: string;
+  /** kolikátého v měsíci je příspěvek splatný */
+  den_splatnosti: number;
 }
 
 interface ReadekPolozky {
@@ -185,6 +187,7 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     fio_token_naznak: token ? naznak(token) : null,
     sync_window_days: Number(mapa.get('sync_window_days') ?? '14'),
     vyuctovani_od: mapa.get('vyuctovani_od') ?? new Date().toISOString().slice(0, 7),
+    den_splatnosti: Number(mapa.get('den_splatnosti') ?? '20'),
   };
 }
 

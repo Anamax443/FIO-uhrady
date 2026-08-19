@@ -323,6 +323,7 @@ export default {
               prehled,
               zaplaceno,
               nastaveni.vyuctovani_od,
+              nastaveni.den_splatnosti,
               beh,
               platby.filter((p) => p.member_id === null).length,
               kdo,
@@ -346,7 +347,7 @@ export default {
             nactiNastaveni(env.DB),
           ]);
           return html(
-            renderVyrovnani(prehled, zaplaceno, nastaveni.vyuctovani_od, kdo, env.GIT_COMMIT ?? 'dev'),
+            renderVyrovnani(prehled, zaplaceno, nastaveni.vyuctovani_od, nastaveni.den_splatnosti, kdo, env.GIT_COMMIT ?? 'dev'),
           );
         }
 
@@ -401,13 +402,20 @@ export default {
           return json({ ok: true, id });
         }
 
-        if (request.method === 'POST' && path === '/api/vyuctovani-od') {
-          const d = (await telo(request)) as { od?: string };
+        if (request.method === 'POST' && path === '/api/sledovani') {
+          const d = (await telo(request)) as { od?: string; den?: string };
           const od = String(d.od ?? '').trim();
           if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(od)) {
-            throw new ChybaVstupu('Období čekám ve tvaru RRRR-MM, například 2026-01.');
+            throw new ChybaVstupu('Počátek sledování čekám ve tvaru RRRR-MM, například 2026-01.');
           }
-          await ulozNastaveni(env.DB, 'vyuctovani_od', od, kdo, `Vyúčtování se počítá od ${od}`);
+          const den = Number(String(d.den ?? '').trim());
+          // 28 je strop schválně: 29.–31. v únoru neexistuje a splatnost
+          // by se každý rok posouvala.
+          if (!Number.isInteger(den) || den < 1 || den > 28) {
+            throw new ChybaVstupu('Den splatnosti musí být číslo od 1 do 28 (aby vyšel i v únoru).');
+          }
+          await ulozNastaveni(env.DB, 'vyuctovani_od', od, kdo, `Příspěvky se sledují od ${od}`);
+          await ulozNastaveni(env.DB, 'den_splatnosti', String(den), kdo, `Splatnost nastavena na ${den}. den v měsíci`);
           return json({ ok: true });
         }
 
