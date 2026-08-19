@@ -14,8 +14,21 @@ Doména: stačí `fio-uhrady.bass443.workers.dev`, vlastní zatím ne.
 - `scripts/deploy.mjs` — otiskne krátký hash commitu do `/api/version`, odmítne špinavý strom.
 
 **Nenasazeno.** Ostrá D1 nevytvořená (`database_id` ve wrangler.jsonc je placeholder), Access nenastavený.
+Na Cloudflare zatím nevzniklo nic — žádný Worker, žádná databáze.
 
-**Další krok:** sonda `node scripts/fio-probe.mjs` s read-only Fio tokenem — potvrdit `column25`.
+**Čeká na uživatele — bez toho se nedá dál:**
+1. **Read-only token z Fio** → `.dev.vars` → `npm run probe`. Sonda musí potvrdit `column25`.
+   Když v posledních 30 dnech není u žádné platby komentář, dopsat ho v internetbankingu k jedné
+   a spustit znovu — jinak nepoznáme „pole neexistuje" od „nikdo ho nevyplnil".
+2. **Ostrá D1:** `npx wrangler d1 create fio-uhrady` → `database_id` doplnit do `wrangler.jsonc`.
+3. **Cloudflare Access** na `/admin` (Zero Trust → Access → Applications), až bude co chránit.
+
+Zápisy do databáze i vytváření zdrojů na Cloudflare dělá uživatel; AI dodá hotové bloky k spuštění.
+
+**Stav roadmapy** (číslování podle záznamu níž): 1 ⏳ čeká na token · 2 ✅ hotovo · 3–6 ⚪ nezačato ·
+7 ✅ docs/BUILD.md napsán (doplní se po prvním ostrém nasazení).
+
+**Stav gitu k tomuto záznamu:** `6b90450` na `origin/main`, pracovní strom čistý.
 
 ## 2026-08-19 — zadání a návrh
 
