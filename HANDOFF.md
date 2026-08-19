@@ -2,6 +2,37 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — admin napojený na databázi, nastavení s VS, audit
+
+Admin už nekreslí ukázková data — čte a zapisuje do D1.
+
+**Hotové a ověřené lokálně (proti místní D1 se schématem i výplní):**
+- `src/db.ts` — čtení přehledu, uložení/smazání položky, VS u osob, token do Fio.
+  **Žádný zápis bez záznamu do `audit_log`**: změna i její záznam jdou jednou `db.batch()`,
+  takže nemůže vzniknout změna, u které není vidět kdo a kdy.
+- `src/ui.ts` — společný shell (menu, hamburger, tokeny), stránky dodávají jen obsah.
+- `/admin/nastaveni` — VS u každé osoby (podle něj se poznají platby), vložení tokenu do Fio
+  a posledních 20 změn z logu. Uložený token se z databáze do UI nikdy nevrací, jen náznak `••••1234`.
+- `/admin/export.csv` — středníky, BOM a desetinná čárka, aby to Excel otevřel rovnou.
+- Zápis přijímáme jen z vlastní stránky (kontrola `Origin`) — ověřeno, že bez ní přijde 403.
+- Ověřeno naživo: `/api/health` hlásí 14 položek, souhrn z databáze sedí na dřívější ruční propočet
+  (10 626 Kč/měs, saldo +9 632 Kč), úprava položky se zapsala a objevila se v auditu,
+  kolize VS i nesmyslný VS vrací srozumitelnou hlášku, krátký token appka odmítne.
+- Opraveno: rozdělení procent se dopočítává metodou největšího zbytku, takže „rovným dílem"
+  u 299 Kč nenechá viset haléř a nesvítí „nerozděleno −0 Kč".
+
+**Zbývá k tomuhle kroku:** import CSV zpátky (export hotový), stránka Osoby (zakládání osob),
+Log synchronizace jako samostatná stránka.
+
+**Nasazení — dělá uživatel** (AI nesahá na ostrá data ani nezakládá zdroje):
+```powershell
+npx wrangler d1 create fio-uhrady                                    # database_id → wrangler.jsonc
+npx wrangler d1 execute fio-uhrady --remote --file schema/0001_init.sql
+npx wrangler d1 execute fio-uhrady --remote --file schema/seed_priklad.sql   # volitelné
+npm run deploy
+```
+Pak Cloudflare Access na `/admin` a token do Fio vložit v Nastavení.
+
 ## 2026-08-19 — admin v IT-ops shellu, podíly na osoby, jednorázové položky
 
 **Vzhled:** převzatý ze [Interface-Par](https://github.com/Anamax443/Interface-Par) — hustý WinBox shell
