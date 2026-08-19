@@ -228,7 +228,7 @@ export const SYMBOLY = `
 <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.2" cy="5.2" r="2.8"/><path d="m7.2 7.2 6 6M11.2 11.2l-1.4 1.4M13.2 9.2l-1.4 1.4"/></symbol>
 </defs></svg>`;
 
-type Stranka = 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'nastaveni' | 'log' | 'oapp';
+type Stranka = 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'nastaveni' | 'log' | 'dokumentace' | 'oapp';
 
 interface Polozka {
   klic: Stranka | null;
@@ -248,6 +248,7 @@ const MENU: Polozka[] = [
 const MENU_SPRAVA: Polozka[] = [
   { klic: 'nastaveni', href: '/admin/nastaveni', ikona: 'i-gear', popis: 'Nastavení' },
   { klic: 'log', href: '/admin/log', ikona: 'i-log', popis: 'Log synchronizace' },
+  { klic: 'dokumentace', href: '/admin/dokumentace', ikona: 'i-doc', popis: 'Dokumentace' },
   { klic: 'oapp', href: '/admin/o-aplikaci', ikona: 'i-info', popis: 'O aplikaci' },
 ];
 

@@ -66,7 +66,9 @@ export function spocitej(prehled: Prehled): Souhrn {
     if (jednorazovy) saldoCelkem += castka;
     else mesicneCelkem += castka;
 
-    if (polozka.castka_celkem === 0 || nerozdeleno !== 0) nedokoncenych++;
+    // Nula je platná částka, ne chybějící údaj — nedokončené je jen to,
+    // co se nerozdělilo celé.
+    if (nerozdeleno !== 0) nedokoncenych++;
     radky.push({ polozka, jednorazovy, castka, naOsobu, nerozdeleno });
   }
 
@@ -180,11 +182,9 @@ function grid(prehled: Prehled, s: Souhrn): string {
         .join('');
 
       const stav =
-        p.castka_celkem === 0
-          ? '<span class="s-warn"><span class="dot"></span>chybí částka</span>'
-          : r.nerozdeleno !== 0
-            ? `<span class="s-warn"><span class="dot"></span>zbývá ${formatKc(r.nerozdeleno)}</span>`
-            : '<span class="s-ok"><span class="dot"></span>rozděleno</span>';
+        r.nerozdeleno !== 0
+          ? `<span class="s-warn"><span class="dot"></span>zbývá ${formatKc(r.nerozdeleno)}</span>`
+          : '<span class="s-ok"><span class="dot"></span>rozděleno</span>';
 
       const kdy =
         r.jednorazovy && p.datum ? p.datum.split('-').reverse().join('. ') : popisPeriody(p.perioda);
@@ -193,10 +193,8 @@ function grid(prehled: Prehled, s: Souhrn): string {
   <td class="nazev">${esc(p.nazev)}${p.poznamka ? ` <span class="pozn">— ${esc(p.poznamka)}</span>` : ''}</td>
   <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
   <td class="col-per" data-popis="Kdy">${esc(kdy)}</td>
-  <td class="col-num" data-popis="Za období">${p.castka_celkem === 0 ? '—' : formatKc(p.castka_celkem)}</td>
-  <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně">${
-    r.castka === 0 ? '—' : r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)
-  }</td>
+  <td class="col-num" data-popis="Za období">${formatKc(p.castka_celkem)}</td>
+  <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně">${r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)}</td>
   ${bunky}
   <td class="col-stav" data-popis="Stav">${stav}</td>
 </tr>`;
@@ -281,12 +279,13 @@ function detail(prehled: Prehled): string {
     <div class="frow"><label for="d-poznamka">Poznámka</label><textarea id="d-poznamka"></textarea></div>
 
     <div class="subhead">Kdo se skládá
-      <button class="tbtn" type="button" id="d-rovnym">Rovným dílem</button>
+      <button class="tbtn" type="button" id="d-rovnym" title="Rozdělí celou částku na stejné díly mezi zaškrtnuté">Rovným dílem</button>
+      <button class="tbtn" type="button" id="d-zbytek-rovnym" title="Nechá zadané pevné částky a zbytek rozdělí mezi ostatní zaškrtnuté">Zbytek rovným dílem</button>
     </div>
     ${podily}
     <div class="zbytek" id="d-zbytek"><span>Nerozděleno</span><b>0 Kč</b></div>
     <div class="dopad" id="d-dopad"></div>
-    <span class="note">Odškrtnutá osoba se na položce nepodílí. Zbytek se nikam neschová — zůstane vidět tady i v seznamu.</span>
+    <span class="note">Odškrtnutá osoba se na položce nepodílí. Kdo má pevnou částku, tomu ji „Zbytek rovným dílem" nechá a rozdělí jen to, co zbývá. Nerozdělený zbytek se nikam neschová — zůstane vidět tady i v seznamu.</span>
 
     <div class="subhead">Historie změn</div>
     <div class="historie" id="d-historie"><span class="note">—</span></div>
@@ -528,6 +527,36 @@ el('t-smazat').addEventListener('click', () => {
   const p = MODEL.polozky.find((x) => x.id === vybraneId);
   if (!confirm('Smazat položku „' + p.nazev + '"? Zůstane po ní záznam v logu změn.')) return;
   void posli('/api/polozka/' + vybraneId + '/smazat', {});
+});
+
+// „Děda platí 4 000, zbytek si ženské rozdělí." Pevně zadané částky zůstanou,
+// zbytek se rozpustí mezi ostatní zaškrtnuté — a to do posledního haléře,
+// takže nic nezůstane viset jako nerozděleno.
+el('d-zbytek-rovnym').addEventListener('click', () => {
+  const celkem = Math.round((cislo(el('d-castka').value) || 0) * 100);
+  const zapojeni = MODEL.osoby.filter((o) => q('[data-zapojen="' + o.id + '"]').checked);
+  const maPevnou = (o) =>
+    q('[data-rezim="' + o.id + '"]').value === 'castka' &&
+    q('[data-hodnota="' + o.id + '"]').value.trim() !== '';
+
+  const pevni = zapojeni.filter(maPevnou);
+  const zbyvajici = zapojeni.filter((o) => !maPevnou(o));
+  if (zbyvajici.length === 0) { hlaska('Není komu zbytek rozdělit — všichni zaškrtnutí mají pevnou částku.', 'chyba'); return; }
+
+  const obsazeno = pevni.reduce((soucet, o) => soucet + Math.round((cislo(q('[data-hodnota="' + o.id + '"]').value) || 0) * 100), 0);
+  const zbytek = celkem - obsazeno;
+  if (zbytek < 0) { hlaska('Pevné částky přesahují celkovou částku položky.', 'chyba'); return; }
+
+  const dil = Math.floor(zbytek / zbyvajici.length);
+  let navic = zbytek - dil * zbyvajici.length;
+  zbyvajici.forEach((o) => {
+    const castka = dil + (navic > 0 ? 1 : 0);
+    if (navic > 0) navic--;
+    q('[data-rezim="' + o.id + '"]').value = 'castka';
+    q('[data-hodnota="' + o.id + '"]').value = String(castka / 100);
+  });
+  hlaska('', '');
+  prepocitej();
 });
 
 el('d-rovnym').addEventListener('click', () => {

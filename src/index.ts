@@ -40,6 +40,7 @@ import {
   nactiBehy,
   zaplacenoOsobami,
 } from './db.js';
+import { renderDokumentace } from './docs-page.js';
 import { renderLog, renderOApp, renderOsoby, renderPrehled, renderVyrovnani } from './more-pages.js';
 import { popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
@@ -337,6 +338,11 @@ export default {
           return html(
             renderVyrovnani(prehled, zaplaceno, nastaveni.vyuctovani_od, kdo, env.GIT_COMMIT ?? 'dev'),
           );
+        }
+
+        if (request.method === 'GET' && path === '/admin/dokumentace') {
+          const nastaveni = await nactiNastaveni(env.DB);
+          return html(renderDokumentace(nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
         }
 
         if (request.method === 'GET' && path === '/admin/log') {
