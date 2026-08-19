@@ -2,6 +2,36 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — frontend admina (náklady domu)
+
+Zadání upřesněno: appka nemá jen párovat platby, ale nejdřív **evidovat náklady domu** —
+ze stránky musí být vidět celkové náklady a kolik z nich padá na jednotlivé členy.
+Postup podle uživatele: **nejdřív frontend admina, vazby (databáze) až potom.**
+
+**Model:** osoby (máma, děda, Lucka, Eliška) × **platební jednotky**. Jednotka je jeden člověk
+nebo kumulace („máma + Eliška"); dělí se na jednotky, protože od jednotky chodí platba s jedním VS.
+Rozpad je **per položka**, ne globální procento — děda může mít jen stočné a uhlí.
+Podíl se zadává procentem nebo pevnou částkou. Zbytek se ukazuje jako „nerozděleno".
+
+**Hotové:**
+- `src/money.ts` — haléře, periody → měsíční ekvivalent, rozpad na jednotky.
+- `src/admin-page.ts` — přehled: souhrnné dlaždice, matice položka × jednotka, formulář položky.
+- `src/index.ts` — `/admin` fail-closed za Cloudflare Access (`ctx.access`); `DEV_ADMIN`
+  funguje jen na localhostu, takže ani omylem nasazená proměnná ochranu neobejde.
+- Schéma 0001 přepsáno (nikde nenasazené, tak se nemigruje): `members`, `units`,
+  `unit_members`, `cost_items`, `cost_shares`; `payers` → `units`.
+- Ověřeno: typecheck OK, `wrangler dev` vrátil `/admin` 200 a souhrn sedí ručnímu propočtu
+  (Lucka 5 839 + máma & Eliška 4 787 = 10 626 Kč měsíčně na vzorových datech).
+
+**Rozpracované:** stránka se kreslí z `src/sample.ts`; ukládání je vypnuté a je to na stránce vidět.
+
+**Další krok:** vazba na D1 — `nactiPrehled()` místo `vzorovyPrehled()`, POST handlery
+položky a jednotek, CSRF/origin kontrola u zápisů.
+
+**Otevřené k doptání:** v tabulce „Náklady bydlení" je Celkem 6 909 Kč, ale součet sloupce
+„mé náklady" je 13 530 Kč a jeho měsíční ekvivalent 6 626 Kč — ani jedno nesedí; ujasnit,
+jak se to počítalo, ať přehled navazuje na to, co uživatel zná.
+
 ## 2026-08-19 — kostra Workeru stojí a ověřená
 
 Doména: stačí `fio-uhrady.bass443.workers.dev`, vlastní zatím ne.
