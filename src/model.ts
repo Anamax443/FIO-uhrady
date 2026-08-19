@@ -29,6 +29,11 @@ export interface Osoba {
    * ať je vidět, co stojí — ale závazek nese rodič.
    */
   pod_member_id?: number | null;
+  /** kam chodí vyúčtování */
+  email?: string | null;
+  /** kdo smí do správy a komu chodí souhrn za všechny */
+  je_admin?: number;
+  aktivni?: number;
 }
 
 export interface Polozka {

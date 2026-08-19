@@ -35,7 +35,12 @@ import {
   priradPlatbu,
   ulozPolozku,
   ulozIdentifikaci,
+  ulozNastaveni,
+  ulozOsobu,
+  nactiBehy,
+  zaplacenoOsobami,
 } from './db.js';
+import { renderLog, renderOApp, renderOsoby, renderPrehled, renderVyrovnani } from './more-pages.js';
 import { popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
@@ -292,6 +297,102 @@ export default {
               nastaveni.fio_token_naznak !== null,
             ),
           );
+        }
+
+        if (request.method === 'GET' && path === '/admin/prehled') {
+          const [prehled, zaplaceno, nastaveni, beh, platby] = await Promise.all([
+            nactiPrehled(env.DB),
+            zaplacenoOsobami(env.DB),
+            nactiNastaveni(env.DB),
+            posledniBeh(env.DB),
+            nactiPlatby(env.DB, 500),
+          ]);
+          return html(
+            renderPrehled(
+              prehled,
+              zaplaceno,
+              nastaveni.vyuctovani_od,
+              beh,
+              platby.filter((p) => p.member_id === null).length,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+            ),
+          );
+        }
+
+        if (request.method === 'GET' && path === '/admin/osoby') {
+          const [osoby, nastaveni] = await Promise.all([
+            nactiOsoby(env.DB, true),
+            nactiNastaveni(env.DB),
+          ]);
+          return html(renderOsoby(osoby, nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
+        }
+
+        if (request.method === 'GET' && path === '/admin/vyrovnani') {
+          const [prehled, zaplaceno, nastaveni] = await Promise.all([
+            nactiPrehled(env.DB),
+            zaplacenoOsobami(env.DB),
+            nactiNastaveni(env.DB),
+          ]);
+          return html(
+            renderVyrovnani(prehled, zaplaceno, nastaveni.vyuctovani_od, kdo, env.GIT_COMMIT ?? 'dev'),
+          );
+        }
+
+        if (request.method === 'GET' && path === '/admin/log') {
+          const [behy, nastaveni] = await Promise.all([nactiBehy(env.DB), nactiNastaveni(env.DB)]);
+          return html(renderLog(behy, nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
+        }
+
+        if (request.method === 'GET' && path === '/admin/o-aplikaci') {
+          const [nastaveni, pocty] = await Promise.all([
+            nactiNastaveni(env.DB),
+            env.DB.prepare(
+              `select (select count(*) from members) osob, (select count(*) from cost_items) polozek,
+                      (select count(*) from payments) plateb, (select count(*) from audit_log) zmen`,
+            ).first<{ osob: number; polozek: number; plateb: number; zmen: number }>(),
+          ]);
+          return html(
+            renderOApp(
+              nastaveni.nazev_domu,
+              pocty ?? { osob: 0, polozek: 0, plateb: 0, zmen: 0 },
+              nastaveni.fio_token_naznak !== null,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+            ),
+          );
+        }
+
+        if (request.method === 'POST' && path === '/api/osoba') {
+          const d = (await telo(request)) as {
+            id?: number | null;
+            jmeno?: string;
+            email?: string | null;
+            je_admin?: boolean;
+            aktivni?: boolean;
+          };
+          const id = await ulozOsobu(
+            env.DB,
+            {
+              id: d.id === null || d.id === undefined ? null : Number(d.id),
+              jmeno: String(d.jmeno ?? ''),
+              email: d.email === undefined || d.email === null ? null : String(d.email),
+              je_admin: Boolean(d.je_admin),
+              aktivni: d.aktivni !== false,
+            },
+            kdo,
+          );
+          return json({ ok: true, id });
+        }
+
+        if (request.method === 'POST' && path === '/api/vyuctovani-od') {
+          const d = (await telo(request)) as { od?: string };
+          const od = String(d.od ?? '').trim();
+          if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(od)) {
+            throw new ChybaVstupu('Období čekám ve tvaru RRRR-MM, například 2026-01.');
+          }
+          await ulozNastaveni(env.DB, 'vyuctovani_od', od, kdo, `Vyúčtování se počítá od ${od}`);
+          return json({ ok: true });
         }
 
         if (request.method === 'GET' && path === '/admin/export.csv') {

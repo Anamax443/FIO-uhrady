@@ -228,7 +228,7 @@ export const SYMBOLY = `
 <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.2" cy="5.2" r="2.8"/><path d="m7.2 7.2 6 6M11.2 11.2l-1.4 1.4M13.2 9.2l-1.4 1.4"/></symbol>
 </defs></svg>`;
 
-type Stranka = 'naklady' | 'uhrady' | 'nastaveni';
+type Stranka = 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'nastaveni' | 'log' | 'oapp';
 
 interface Polozka {
   klic: Stranka | null;
@@ -238,17 +238,17 @@ interface Polozka {
 }
 
 const MENU: Polozka[] = [
-  { klic: null, href: null, ikona: 'i-grid', popis: 'Přehled' },
+  { klic: 'prehled', href: '/admin/prehled', ikona: 'i-grid', popis: 'Přehled' },
   { klic: 'naklady', href: '/admin', ikona: 'i-list', popis: 'Náklady domu' },
-  { klic: null, href: null, ikona: 'i-users', popis: 'Osoby' },
+  { klic: 'osoby', href: '/admin/osoby', ikona: 'i-users', popis: 'Osoby' },
   { klic: 'uhrady', href: '/admin/uhrady', ikona: 'i-bank', popis: 'Úhrady z Fio' },
-  { klic: null, href: null, ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
+  { klic: 'vyrovnani', href: '/admin/vyrovnani', ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
 ];
 
 const MENU_SPRAVA: Polozka[] = [
   { klic: 'nastaveni', href: '/admin/nastaveni', ikona: 'i-gear', popis: 'Nastavení' },
-  { klic: null, href: null, ikona: 'i-log', popis: 'Log synchronizace' },
-  { klic: null, href: null, ikona: 'i-info', popis: 'O aplikaci' },
+  { klic: 'log', href: '/admin/log', ikona: 'i-log', popis: 'Log synchronizace' },
+  { klic: 'oapp', href: '/admin/o-aplikaci', ikona: 'i-info', popis: 'O aplikaci' },
 ];
 
 const menuPolozka = (p: Polozka, aktivni: Stranka): string => {

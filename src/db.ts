@@ -13,6 +13,8 @@ export interface Nastaveni {
   /** jen poslední znaky — celý token se z databáze do UI nikdy neposílá */
   fio_token_naznak: string | null;
   sync_window_days: number;
+  /** od kterého měsíce se počítají příspěvky, 'YYYY-MM' */
+  vyuctovani_od: string;
 }
 
 interface ReadekPolozky {
@@ -36,12 +38,91 @@ interface RadekPodilu {
 
 /* ---------- čtení ---------- */
 
-export async function nactiOsoby(db: D1Database): Promise<Osoba[]> {
+export async function nactiOsoby(db: D1Database, iNeaktivni = false): Promise<Osoba[]> {
   const { results } = await db
     .prepare(
-      'select id, jmeno, je_platce, ucet, vs, pod_member_id from members where aktivni = 1 order by id',
+      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni
+         from members ${iNeaktivni ? '' : 'where aktivni = 1'} order by aktivni desc, id`,
     )
     .all<Osoba>();
+  return results;
+}
+
+export class ChybaOsoby extends Error {}
+
+/** Založí nebo přejmenuje osobu, nastaví e-mail a roli. */
+export async function ulozOsobu(
+  db: D1Database,
+  vstup: { id: number | null; jmeno: string; email: string | null; je_admin: boolean; aktivni: boolean },
+  kdo: string,
+): Promise<number> {
+  const jmeno = vstup.jmeno.trim();
+  if (jmeno === '') throw new ChybaVstupu('Vyplň jméno osoby.');
+  if (jmeno.length > 60) throw new ChybaVstupu('Jméno je delší než 60 znaků.');
+  const email = vstup.email === null || vstup.email.trim() === '' ? null : vstup.email.trim();
+  if (email !== null && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new ChybaVstupu(`„${email}" nevypadá jako e-mailová adresa.`);
+  }
+
+  const stejne = await db
+    .prepare('select id from members where jmeno = ? and id is not ?')
+    .bind(jmeno, vstup.id)
+    .first<{ id: number }>();
+  if (stejne) throw new ChybaVstupu(`Osoba se jménem ${jmeno} už existuje.`);
+
+  if (vstup.id === null) {
+    const vlozeno = await db
+      .prepare('insert into members (jmeno, email, je_admin, aktivni) values (?, ?, ?, ?) returning id')
+      .bind(jmeno, email, vstup.je_admin ? 1 : 0, vstup.aktivni ? 1 : 0)
+      .first<{ id: number }>();
+    if (!vlozeno) throw new Error('Osobu se nepodařilo založit.');
+    await db.batch([
+      auditStatement(db, kdo, 'vytvoreni', 'osoba', String(vlozeno.id), `Přidána osoba ${jmeno}`, null, {
+        jmeno,
+        email,
+      }),
+    ]);
+    return vlozeno.id;
+  }
+
+  const pred = await db.prepare('select * from members where id = ?').bind(vstup.id).first();
+  if (pred === null) throw new ChybaVstupu('Osoba už neexistuje.');
+
+  await db.batch([
+    db
+      .prepare('update members set jmeno = ?, email = ?, je_admin = ?, aktivni = ? where id = ?')
+      .bind(jmeno, email, vstup.je_admin ? 1 : 0, vstup.aktivni ? 1 : 0, vstup.id),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'osoba',
+      String(vstup.id),
+      `Upravena osoba ${jmeno}${vstup.aktivni ? '' : ' (vyřazena z evidence)'}`,
+      pred,
+      { jmeno, email, je_admin: vstup.je_admin ? 1 : 0, aktivni: vstup.aktivni ? 1 : 0 },
+    ),
+  ]);
+  return vstup.id;
+}
+
+/** Kolik od koho přišlo na účet. Klíč = member_id. */
+export async function zaplacenoOsobami(db: D1Database): Promise<Map<number, number>> {
+  const { results } = await db
+    .prepare(
+      'select member_id, sum(castka) as soucet from payments where member_id is not null and castka > 0 group by member_id',
+    )
+    .all<{ member_id: number; soucet: number }>();
+  return new Map(results.map((r) => [r.member_id, r.soucet]));
+}
+
+export async function nactiBehy(db: D1Database, limit = 50): Promise<Beh[]> {
+  const { results } = await db
+    .prepare(
+      'select zacatek, konec, stav, detail, novych, sparovanych from sync_runs order by id desc limit ?',
+    )
+    .bind(limit)
+    .all<Beh>();
   return results;
 }
 
@@ -103,7 +184,28 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     nazev_domu: mapa.get('nazev_domu') ?? 'dům',
     fio_token_naznak: token ? naznak(token) : null,
     sync_window_days: Number(mapa.get('sync_window_days') ?? '14'),
+    vyuctovani_od: mapa.get('vyuctovani_od') ?? new Date().toISOString().slice(0, 7),
   };
+}
+
+/** Uloží jednu položku nastavení a zapíše, kdo ji změnil. */
+export async function ulozNastaveni(
+  db: D1Database,
+  klic: string,
+  hodnota: string,
+  kdo: string,
+  popis: string,
+): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `insert into settings (klic, hodnota, changed_at, changed_by) values (?, ?, datetime('now'), ?)
+         on conflict(klic) do update set hodnota = excluded.hodnota,
+              changed_at = excluded.changed_at, changed_by = excluded.changed_by`,
+      )
+      .bind(klic, hodnota, kdo),
+    auditStatement(db, kdo, 'zmena', 'nastaveni', klic, popis, null, { klic, hodnota }),
+  ]);
 }
 
 /** Token se nikdy neukazuje celý — jen tolik, aby šel poznat. */
