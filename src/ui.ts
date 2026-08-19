@@ -223,6 +223,66 @@ const menuPolozka = (p: Polozka, aktivni: Stranka): string => {
   return `<a class="navitem" href="${p.href}"${je ? ' aria-current="page"' : ''}>${ikona}${p.popis}</a>`;
 };
 
+/**
+ * Veřejný rozcestník na kořeni. Je vidět bez přihlášení, takže tu nesmí být
+ * žádná data — jen kam jít a jestli aplikace žije.
+ */
+export function uvodniStranka(commit: string, bezi: boolean): string {
+  return `<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIO-uhrady</title>
+<style>${CSS}
+body { display: grid; place-items: center; padding: 24px; }
+.karta { width: min(520px, 100%); background: var(--pane); border: 1px solid var(--border); border-radius: 2px; }
+.karta .telo { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+.karta h1 { margin: 0; font-size: 17px; }
+.karta p { margin: 0; color: var(--text-dim); }
+.odkazy { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.odkazy .btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.paticka { display: flex; gap: 10px; flex-wrap: wrap; padding: 7px 18px; border-top: 1px solid var(--border); background: var(--chrome-hi); color: var(--text-dim); font-size: 11.5px; }
+.paticka b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+${SYMBOLY}
+<div class="karta">
+  <div class="panehead"><span class="brand"><span class="mark"></span>FIO-uhrady</span></div>
+  <div class="telo">
+    <h1>Náklady domácnosti a příspěvky na ně</h1>
+    <p>
+      Aplikace počítá, co domácnost stojí, rozděluje náklady mezi členy a páruje příspěvky
+      došlé na účet u Fio banky podle variabilního symbolu.
+    </p>
+    <div class="odkazy">
+      <a class="btn primary" href="/admin"><svg class="icon icon-sm"><use href="#i-gear"/></svg>Správa</a>
+    </div>
+    <p class="note">
+      Správa je chráněná přihlášením. Přehled pro členy domácnosti se otevírá vlastním
+      odkazem, který dostanou — veřejnou adresu nemá.
+    </p>
+  </div>
+  <div class="paticka">
+    <span><span class="dot" style="background: var(--${bezi ? 'ok' : 'crit'})"></span>${
+      bezi ? 'běží' : 'databáze neodpovídá'
+    }</span>
+    <span>verze <b class="mono">${esc(commit)}</b></span>
+    <span class="spacer"></span>
+    <span class="mono" id="hodiny">--:--:--</span>
+  </div>
+</div>
+<script>
+const hodiny = document.getElementById('hodiny');
+const tik = () => { hodiny.textContent = new Date().toLocaleTimeString('cs-CZ'); };
+tik();
+setInterval(tik, 1000);
+</script>
+</body>
+</html>`;
+}
+
 export interface Shell {
   aktivni: Stranka;
   nazevDomu: string;

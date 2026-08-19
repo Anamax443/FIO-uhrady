@@ -28,6 +28,7 @@ import { popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
 import { synchronizuj } from './sync.js';
+import { uvodniStranka } from './ui.js';
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data, null, 2), {
@@ -296,9 +297,14 @@ export default {
     if (path.startsWith('/v/')) return notBuilt('přehled');
 
     if (path === '/') {
-      return new Response('FIO-uhrady — běží. Správa je na /admin, přehled bude na /v/{token}.', {
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      });
+      // Stav databáze se ověří dotazem, ne odhadem — návštěvník má vidět pravdu.
+      let bezi = true;
+      try {
+        await env.DB.prepare('select 1').first();
+      } catch {
+        bezi = false;
+      }
+      return html(uvodniStranka(env.GIT_COMMIT ?? 'dev', bezi));
     }
 
     return json({ chyba: 'Neznámá cesta', cesta: path }, 404);
