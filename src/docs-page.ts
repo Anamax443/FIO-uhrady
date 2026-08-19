@@ -52,7 +52,12 @@ const KAPITOLY: Kapitola[] = [
         Druhá polovina práce je <b>párování příspěvků</b>: aplikace si sama stahuje pohyby
         z účtu u Fio banky a poznává, od koho platba přišla. Díky tomu je vidět, kolik už
         kdo poslal a kolik ještě zbývá.
-      </p>`,
+      </p>
+      <div class="poznamka">
+        <b>Je to podklad, ne účetnictví.</b> Smyslem je, aby bylo doložitelně vidět, co dům
+        stojí a jak na tom kdo je s příspěvkem — ne vystavovat předpisy k úhradě. Nic se
+        nevymáhá, čísla mají hlavně informovat.
+      </div>`,
   },
   {
     id: 'naklady',

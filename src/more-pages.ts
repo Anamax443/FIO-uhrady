@@ -186,7 +186,7 @@ export function renderOsoby(osoby: Osoba[], nazevDomu: string, kdo: string, comm
       <input type="text" data-jmeno="${o.id}" value="${esc(o.jmeno)}" maxlength="60" aria-label="Jméno" />
       <input type="email" data-email="${o.id}" value="${esc(o.email ?? '')}" placeholder="e-mail pro vyúčtování" aria-label="E-mail" />
       <label class="volba"><input type="checkbox" data-admin="${o.id}"${o.je_admin ? ' checked' : ''} /> admin</label>
-      <label class="volba"><input type="checkbox" data-aktivni="${o.id}"${o.aktivni === 0 ? '' : ' checked'} /> vede se</label>
+      <label class="volba"><input type="checkbox" data-aktivni="${o.id}"${o.aktivni === 0 ? '' : ' checked'} /> evidovat</label>
     </div>`,
     )
     .join('');
@@ -197,15 +197,19 @@ export function renderOsoby(osoby: Osoba[], nazevDomu: string, kdo: string, comm
     <div class="telo">
       <p class="vysvetleni">
         Osoby, mezi které se dělí náklady. <b>E-mail</b> slouží k rozeslání vyúčtování,
-        <b>admin</b> dostane souhrn za celou domácnost a smí do správy. Kdo se odsud odškrtne,
-        přestane se počítat do nových rozpadů, ale zůstane v historii — mazat lidi, na které
-        se váže minulé vyúčtování, by rozbilo záznamy.
+        <b>admin</b> dostane souhrn za celou domácnost a smí do správy.
+      </p>
+      <p class="vysvetleni">
+        <b>Evidovat</b> říká, jestli se s osobou dál počítá. Odškrtnutá osoba se přestane
+        nabízet při rozdělování nákladů a zmizí z přehledů, ale <b>zůstane v historii</b> —
+        smazat člověka, na kterého se váže minulé vyúčtování, by rozbilo záznamy o tom,
+        kdo co kdy platil. Proto se lidé nemažou, jen přestanou evidovat.
       </p>
       <p class="vysvetleni note">
         Variabilní symboly a to, kdo za koho platí, se nastavuje v <a href="/admin/nastaveni">Nastavení</a>.
       </p>
 
-      <div class="hlavicky"><span>Jméno</span><span>E-mail</span><span>Role</span><span>Stav</span></div>
+      <div class="hlavicky"><span>Jméno</span><span>E-mail</span><span>Role</span><span>Evidovat</span></div>
       ${radky}
 
       <div class="nova">
