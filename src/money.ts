@@ -22,6 +22,34 @@ const DELITEL: Record<Perioda, number> = {
 export const jePerioda = (v: string): v is Perioda => (PERIODY as readonly string[]).includes(v);
 export const popisPeriody = (p: Perioda): string => POPIS[p];
 
+/**
+ * Druh položky. Pravidelný náklad se rozpouští do měsíčního průměru;
+ * zbylé tři jsou jednorázové a promítnou se rovnou do dlužné částky.
+ * Přeplatek jde do mínusu — dluh snižuje.
+ */
+export const DRUHY = ['pravidelny', 'jednorazovy', 'nedoplatek', 'preplatek'] as const;
+export type Druh = (typeof DRUHY)[number];
+
+const POPIS_DRUHU: Record<Druh, string> = {
+  pravidelny: 'pravidelný',
+  jednorazovy: 'jednorázový',
+  nedoplatek: 'nedoplatek',
+  preplatek: 'přeplatek',
+};
+
+export const popisDruhu = (d: Druh): string => POPIS_DRUHU[d];
+export const jeDruh = (v: string): v is Druh => (DRUHY as readonly string[]).includes(v);
+
+/** Přeplatek snižuje dluh, všechno ostatní ho zvyšuje. */
+export const znamenko = (d: Druh): number => (d === 'preplatek' ? -1 : 1);
+
+/** Jednorázové věci nepatří do měsíčního průměru — jinak by průměr skákal. */
+export const jeJednorazovy = (d: Druh): boolean => d !== 'pravidelny';
+
+/** „+1 200 Kč" / „−1 200 Kč" — u salda musí být znaménko vidět. */
+export const formatKcZnamenko = (halere: number): string =>
+  (halere > 0 ? '+' : halere < 0 ? '−' : '') + formatKc(Math.abs(halere));
+
 /** Kolik z částky za dané období připadá na měsíc. Jednorázové se do měsíčního průměru nepočítá. */
 export function mesicne(castka: number, perioda: Perioda): number {
   const d = DELITEL[perioda];
@@ -62,25 +90,26 @@ export function parseProcento(vstup: string): number | null {
 export type Rezim = 'procento' | 'castka';
 
 export interface Podil {
-  unit_id: number;
+  /** osoba, ne pevná skupina — kombinace se u každé položky liší */
+  member_id: number;
   rezim: Rezim;
   hodnota: number;
 }
 
 export interface RozpadRadku {
-  /** haléře připadající na jednotku, klíč = unit_id */
-  naJednotku: Map<number, number>;
+  /** haléře připadající na osobu, klíč = member_id */
+  naOsobu: Map<number, number>;
   /** co se nerozpustilo — nesmí zmizet potichu, jinak souhrn lže */
   nerozdeleno: number;
 }
 
 export function rozpad(celkem: number, podily: Podil[]): RozpadRadku {
-  const naJednotku = new Map<number, number>();
+  const naOsobu = new Map<number, number>();
   for (const p of podily) {
     const castka = p.rezim === 'castka' ? p.hodnota : Math.round((celkem * p.hodnota) / 10000);
-    naJednotku.set(p.unit_id, (naJednotku.get(p.unit_id) ?? 0) + castka);
+    naOsobu.set(p.member_id, (naOsobu.get(p.member_id) ?? 0) + castka);
   }
   let sum = 0;
-  for (const v of naJednotku.values()) sum += v;
-  return { naJednotku, nerozdeleno: celkem - sum };
+  for (const v of naOsobu.values()) sum += v;
+  return { naOsobu, nerozdeleno: celkem - sum };
 }

@@ -43,6 +43,10 @@ create table if not exists cost_items (
   kategorie     text,
   castka_celkem integer not null,          -- haléře, aby se nepočítalo s float
   perioda       text    not null,          -- 'mesicne'|'ctvrtletne'|'pololetne'|'rocne'|'jednorazove'
+  -- Pravidelný náklad jde do měsíčního průměru; zbylé tři jsou jednorázové
+  -- a promítnou se rovnou do dlužné částky. Přeplatek dluh snižuje.
+  druh          text    not null default 'pravidelny',  -- 'pravidelny'|'jednorazovy'|'nedoplatek'|'preplatek'
+  datum         text,                      -- 'YYYY-MM-DD' u jednorázových: kdy vznikly
   hradi_unit_id integer references units(id) on delete set null,  -- kdo to fyzicky posílá
   poznamka      text,                      -- „bude dražší za 2 měsíce", „platí se z pachtovného"
   plati_od      text,                      -- 'YYYY-MM-DD', null = odjakživa

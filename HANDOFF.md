@@ -2,6 +2,37 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-19 — admin v IT-ops shellu, podíly na osoby, jednorázové položky
+
+**Vzhled:** převzatý ze [Interface-Par](https://github.com/Anamax443/Interface-Par) — hustý WinBox shell
+(titulní lišta → boční menu → toolbar → grid → stavový řádek), tokeny `:root` odtamtud.
+**Material UI se nepoužilo**, a to podle rozboru v tom samém repu: MUI se vyplatí až u resize
+a přeuspořádání sloupců myší, inline editace buňky a virtualizovaného scrollu přes tisíce řádků.
+Tady je 14 položek a CSS vrstva by zůstala stejná. Kdyby přišel požadavek na DataGrid, je to
+přechod na Vite + React + `@mui/x-data-grid` a bundle ~380 kB gzip.
+
+**Model — zásadní oprava:** podíly ukazují na **osoby**, ne na pevné platební jednotky.
+Kombinace se u každé položky liší (Lucka s dědou, Eliška s dědou, máma s Luckou), takže pevné
+skupiny nefungují. Kdo platí ze svého účtu za koho (a pod jakým VS) je samostatná vrstva
+a řeší se až s napojením plateb z Fio.
+
+**Druhy položek:** `pravidelny` (jde do měsíčního průměru) × `jednorazovy` / `nedoplatek` /
+`preplatek` (nejdou do průměru, jdou rovnou do dlužné částky; přeplatek se znaménkem mínus).
+
+**Hotové a ověřené:** typecheck OK, `wrangler dev` vrátil `/admin` 200; součty osob dají přesně
+celek (10 626 Kč/měs = máma 2 622 + děda 462 + Lucka 5 426 + Eliška 2 116) a jednorázové saldo
++9 632 Kč sedí (nedoplatek 4 312 − přeplatek 1 180 + oprava 6 500). Mobil: hamburger, výsuvné
+menu, detail pod seznamem, na úzkém displeji se sloupce osob skrývají a nese je detail.
+
+**Zadání, které přišlo a ještě není postavené:**
+1. **Přehledová stránka je hlavně pro Lucku** — kolik činí její měsíční závazek, že se v čase mění
+   a jak vypadal historicky (graf + historie, ne jen aktuální číslo).
+2. **Token do Fio se zadává v adminu** (Nastavení), ne jen `wrangler secret`. Pozor: token v D1 je
+   citlivý — zapsat, číst jen pro sync, v UI nikdy nezobrazovat celý, jen poslední znaky + „přepsat".
+3. **Export do CSV pro Excel a zpětný import** téhož.
+4. **Každá změna se loguje s identifikací** — kdo (e-mail z Cloudflare Access), kdy, co se změnilo
+   z čeho na co. Tabulka `audit_log`, zapisuje se ve stejné transakci jako změna.
+
 ## 2026-08-19 — frontend admina (náklady domu)
 
 Zadání upřesněno: appka nemá jen párovat platby, ale nejdřív **evidovat náklady domu** —
