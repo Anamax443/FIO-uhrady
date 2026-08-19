@@ -12,15 +12,23 @@ import { esc, shell } from './ui.js';
 
 export interface RadekVyrovnani {
   osoba: Osoba;
-  /** měsíční závazek včetně těch, které osoba zastupuje (nezletilé dítě) */
+  /** měsíční podíl včetně těch, které osoba zastupuje (nezletilé dítě) */
   mesicne: number;
   jednorazove: number;
-  /** kolik měl dohromady zaplatit od začátku vyúčtování */
+  /** kolik měl dohromady přispět od začátku období */
   predpis: number;
   zaplaceno: number;
   /** kladné = zbývá doplatit, záporné = přeplatek */
   rozdil: number;
   zastupuje: string[];
+  /**
+   * Sleduje se u téhle osoby, kolik zaplatila?
+   *
+   * Do rozdělení nákladů se počítají všichni — od toho je vidět, co dům stojí
+   * a na koho co padá. Ale příspěvky chodí na účet jen od někoho; u ostatních
+   * by dluh jen narůstal a nic by neznamenal, protože se skládají jinak.
+   */
+  sledovat: boolean;
 }
 
 /** Počet měsíců od 'YYYY-MM' do teď včetně. Nikdy méně než 1. */
@@ -60,6 +68,7 @@ export function vyrovnani(
         predpis,
         zaplaceno: uhrazeno,
         rozdil: predpis - uhrazeno,
+        sledovat: Boolean(osoba.je_platce),
         zastupuje: prehled.osoby
           .filter((d) => (d.pod_member_id ?? null) === osoba.id)
           .map((d) => d.jmeno),
@@ -97,7 +106,8 @@ export function renderPrehled(
 ): string {
   const s = spocitej(prehled);
   const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice);
-  const dluzi = radky.reduce((a, r) => a + Math.max(0, r.rozdil), 0);
+  // Dluh se sčítá jen u těch, od koho příspěvky na účet opravdu chodí.
+  const dluzi = radky.filter((r) => r.sledovat).reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
   const radkyOsob = radky
     .map(
@@ -106,11 +116,15 @@ export function renderPrehled(
       r.zastupuje.length ? ` <span class="note">(s ${esc(r.zastupuje.join(', '))})</span>` : ''
     }</td>
     <td class="col-num" data-popis="Měsíčně">${formatKc(r.mesicne)}</td>
-    <td class="col-num" data-popis="Předpis celkem">${formatKc(r.predpis)}</td>
+    ${
+      r.sledovat
+        ? `<td class="col-num" data-popis="Přispět celkem">${formatKc(r.predpis)}</td>
     <td class="col-num" data-popis="Zaplaceno">${formatKc(r.zaplaceno)}</td>
     <td class="col-num ${r.rozdil > 0 ? 's-warn' : r.rozdil < 0 ? 'minus' : ''}" data-popis="Rozdíl">${
       r.rozdil === 0 ? 'vyrovnáno' : formatKcZnamenko(r.rozdil)
-    }</td>
+    }</td>`
+        : `<td colspan="3" class="note" data-popis="Příspěvky">nesleduje se — na účet neposílá</td>`
+    }
   </tr>`,
     )
     .join('');
@@ -137,7 +151,7 @@ export function renderPrehled(
       <div class="panehead"><svg class="icon icon-sm"><use href="#i-users"/></svg>Kdo kolik</div>
       <div class="gridwrap">
         <table>
-          <thead><tr><th>Osoba</th><th class="col-num">Měsíčně</th><th class="col-num">Předpis celkem</th><th class="col-num">Zaplaceno</th><th class="col-num">Rozdíl</th></tr></thead>
+          <thead><tr><th>Osoba</th><th class="col-num">Měsíčně</th><th class="col-num">Přispět celkem</th><th class="col-num">Zaplaceno</th><th class="col-num">Rozdíl</th></tr></thead>
           <tbody>${radkyOsob}</tbody>
         </table>
       </div>
@@ -286,6 +300,7 @@ const STYL_VYROVNANI = `
 .osoba-blok .vysledek { border-top: 1px solid var(--border-soft); margin-top: 5px; padding-top: 5px; font-weight: 600; }
 .zbyva { color: var(--warn); }
 .preplatek { color: var(--ok); }
+.skupina { margin: 6px 0 0; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
 .obdobi { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 </style>`;
 
@@ -298,42 +313,66 @@ export function renderVyrovnani(
 ): string {
   const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice);
 
-  const bloky = radky
-    .map((r) => {
-      const stav =
-        r.rozdil > 0
-          ? `<span class="zbyva">zbývá doplatit ${formatKc(r.rozdil)}</span>`
-          : r.rozdil < 0
-            ? `<span class="preplatek">přeplatek ${formatKc(-r.rozdil)}</span>`
-            : '<span>vyrovnáno</span>';
+  const blok = (r: RadekVyrovnani): string => {
+    const stav = !r.sledovat
+      ? '<span class="note">příspěvky se nesledují</span>'
+      : r.rozdil > 0
+        ? `<span class="zbyva">zbývá doplatit ${formatKc(r.rozdil)}</span>`
+        : r.rozdil < 0
+          ? `<span class="preplatek">přeplatek ${formatKc(-r.rozdil)}</span>`
+          : '<span>vyrovnáno</span>';
 
-      return `<section class="osoba-blok">
+    // U koho příspěvky nechodí přes účet, se ukáže jen jeho podíl na nákladech.
+    // Dopočítávat mu dluh by vyrobilo číslo, které nic neznamená.
+    const vypocet = r.sledovat
+      ? `<span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
+        <span>× počet měsíců od ${esc(odMesice)}</span><span>${mesicu}</span>
+        <span>Jednorázové (nedoplatky − přeplatky)</span><span>${formatKcZnamenko(r.jednorazove)}</span>
+        <span class="vysledek">Měl${r.osoba.jmeno.endsWith('a') ? 'a' : ''} přispět</span><span class="vysledek">${formatKc(r.predpis)}</span>
+        <span>Přišlo na účet</span><span>${formatKc(r.zaplaceno)}</span>
+        <span class="vysledek">Rozdíl</span><span class="vysledek">${
+          r.rozdil === 0 ? 'vyrovnáno' : formatKcZnamenko(r.rozdil)
+        }</span>`
+      : `<span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
+        <span>Ročně</span><span>${formatKc(r.mesicne * 12)}</span>
+        ${
+          r.jednorazove !== 0
+            ? `<span>Jednorázové</span><span>${formatKcZnamenko(r.jednorazove)}</span>`
+            : ''
+        }`;
+
+    return `<section class="osoba-blok">
       <div class="hlava">
         <b>${esc(r.osoba.jmeno)}${r.zastupuje.length ? ` <span class="note">(nese i ${esc(r.zastupuje.join(', '))})</span>` : ''}</b>
         ${stav}
       </div>
-      <div class="vypocet">
-        <span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
-        <span>× počet měsíců od ${esc(odMesice)}</span><span>${mesicu}</span>
-        <span>Jednorázové (nedoplatky − přeplatky)</span><span>${formatKcZnamenko(r.jednorazove)}</span>
-        <span class="vysledek">Měl${r.osoba.jmeno.endsWith('a') ? 'a' : ''} zaplatit</span><span class="vysledek">${formatKc(r.predpis)}</span>
-        <span>Přišlo na účet</span><span>${formatKc(r.zaplaceno)}</span>
-        <span class="vysledek">Rozdíl</span><span class="vysledek">${
-          r.rozdil === 0 ? 'vyrovnáno' : formatKcZnamenko(r.rozdil)
-        }</span>
-      </div>
+      <div class="vypocet">${vypocet}</div>
     </section>`;
-    })
-    .join('');
+  };
+
+  const sledovani = radky.filter((r) => r.sledovat);
+  const ostatni = radky.filter((r) => !r.sledovat);
+
+  const bloky =
+    sledovani.map(blok).join('') +
+    (ostatni.length
+      ? `<h3 class="skupina">Ostatní členové — jen podíl na nákladech</h3>` + ostatni.map(blok).join('')
+      : '');
 
   const obsah = `${STYL_VYROVNANI}
   <div>
     <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg>Příspěvky a vyrovnání</div>
     <div class="telo">
       <p class="vysvetleni">
-        Kolik měl kdo od začátku vyúčtování dohromady přispět a kolik od něj skutečně přišlo na účet.
+        Kolik měl kdo od začátku období dohromady přispět a kolik od něj skutečně přišlo na účet.
         Počítá se z <b>aktuálního</b> rozdělení nákladů — když se náklady v čase měnily, starší měsíce
         se počítají dnešními čísly. Přesnější výpočet podle historie přijde s uzávěrkami měsíců.
+      </p>
+      <p class="vysvetleni">
+        Do rozdělení nákladů se počítají <b>všichni evidovaní</b> — od toho je vidět, co dům stojí
+        a na koho co padá. Ale <b>zaplaceno versus zbývá</b> se sleduje jen u toho, od koho příspěvky
+        chodí na účet; nastavuje se to v <a href="/admin/nastaveni">Nastavení</a>. U ostatních by dluh
+        jen narůstal a nic by neznamenal, protože se skládají mimo účet.
       </p>
       <div class="obdobi">
         <label for="od">Vyúčtování od</label>
@@ -358,7 +397,7 @@ document.getElementById('uloz-od').addEventListener('click', async () => {
 });
 </script>`;
 
-  const celkem = radky.reduce((a, r) => a + Math.max(0, r.rozdil), 0);
+  const celkem = sledovani.reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
   return shell({
     aktivni: 'vyrovnani',
@@ -366,7 +405,7 @@ document.getElementById('uloz-od').addEventListener('click', async () => {
     titulek: 'Příspěvky a vyrovnání',
     commit,
     obsah,
-    status: `<span>období od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    status: `<span>období od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
     skript,
   });
 }
