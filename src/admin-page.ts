@@ -299,7 +299,14 @@ function detail(prehled: Prehled): string {
 </section>`;
 }
 
-export function renderNaklady(prehled: Prehled, datum: string, kdo: string, commit: string): string {
+export function renderNaklady(
+  prehled: Prehled,
+  datum: string,
+  kdo: string,
+  commit: string,
+  vybrano: number | null = null,
+  stav: string | null = null,
+): string {
   const s = spocitej(prehled);
 
   // Kdo se počítá někomu jinému (nezletilé dítě), nemá vlastní závazek —
@@ -377,7 +384,8 @@ const DELITEL = { mesicne: 1, ctvrtletne: 3, pololetne: 6, rocne: 12, jednorazov
 const jednorazovy = (druh) => druh !== 'pravidelny';
 const cislo = (text) => parseFloat(String(text).replace(/\\s/g, '').replace(',', '.'));
 
-let vybraneId = ${prehled.polozky[0]?.id ?? 'null'};
+let vybraneId = ${vybrano ?? prehled.polozky[0]?.id ?? 'null'};
+const STAV_PO_ULOZENI = ${JSON.stringify(stav)};
 
 function hlaska(text, typ) {
   const box = el('d-hlaska');
@@ -483,7 +491,12 @@ async function posli(url, telo) {
     });
     const data = await odpoved.json();
     if (!odpoved.ok) { hlaska(data.chyba || 'Uložení se nepovedlo.', 'chyba'); el('d-stav').textContent = ''; return false; }
-    location.reload();
+    // Po uložení se stránka načte znovu (souhrny se musí přepočítat) a rovnou
+    // ukáže, co se stalo — jinak nejde poznat, jestli se uložilo, a člověk
+    // klikne podruhé.
+    const stav = data.zmeneno === false ? 'bezezmen' : 'ulozeno';
+    const kam = data.id ? '/admin?vybrano=' + data.id + '&stav=' + stav : '/admin?stav=smazano';
+    location.assign(kam);
     return true;
   } catch (e) {
     hlaska('Server neodpověděl: ' + e.message, 'chyba');
@@ -600,6 +613,23 @@ el('filtr').addEventListener('input', (e) => {
   });
   el('pocet').textContent = videt + (videt === 1 ? ' položka' : videt >= 2 && videt <= 4 ? ' položky' : ' položek');
 });
+
+// Po návratu z uložení označ řádek a řekni, co se stalo.
+if (vybraneId !== null) {
+  const radek = document.querySelector('#grid tbody tr[data-id="' + vybraneId + '"]');
+  if (radek) {
+    document.querySelectorAll('#grid tbody tr').forEach((x) => x.removeAttribute('data-selected'));
+    radek.setAttribute('data-selected', 'true');
+  }
+}
+
+if (STAV_PO_ULOZENI === 'ulozeno') {
+  hlaska('Uloženo v ' + new Date().toLocaleTimeString('cs-CZ') + '. Změna je zapsaná v historii níž.', 'ok');
+} else if (STAV_PO_ULOZENI === 'bezezmen') {
+  hlaska('Nic se nezměnilo, takže se nic neukládalo — v historii nepřibyl záznam.', 'ok');
+} else if (STAV_PO_ULOZENI === 'smazano') {
+  hlaska('Položka smazána.', 'ok');
+}
 
 ukazPolozku(vybraneId);
 </script>`;

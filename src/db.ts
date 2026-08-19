@@ -480,12 +480,41 @@ const auditStatement = (
       po === null || po === undefined ? null : JSON.stringify(po),
     );
 
-/** Uloží položku i její rozdělení. Vrací id. */
+/** Porovnání starého a nového stavu — ať se do historie nezapisuje prázdné uložení. */
+function stejnaPolozka(pred: Record<string, unknown>, vstup: VstupPolozky): boolean {
+  const shodne = (a: unknown, b: unknown): boolean => String(a ?? '') === String(b ?? '');
+  const poli =
+    shodne(pred['nazev'], vstup.nazev) &&
+    shodne(pred['kategorie'], vstup.kategorie) &&
+    shodne(pred['castka_celkem'], vstup.castka_celkem) &&
+    shodne(pred['perioda'], vstup.perioda) &&
+    shodne(pred['druh'], vstup.druh) &&
+    shodne(pred['datum'], vstup.datum) &&
+    shodne(pred['hradi_member_id'], vstup.hradi_member_id) &&
+    shodne(pred['poznamka'], vstup.poznamka);
+  if (!poli) return false;
+
+  const klic = (p: Podil[]): string =>
+    p
+      .map((x) => `${x.member_id}:${x.rezim}:${x.hodnota}`)
+      .sort()
+      .join('|');
+  const predPodily = Array.isArray(pred['podily']) ? (pred['podily'] as Podil[]) : [];
+  return klic(predPodily) === klic(vstup.podily);
+}
+
+export interface VysledekUlozeni {
+  id: number;
+  /** false = uživatel klikl na Uložit, ale nic nezměnil */
+  zmeneno: boolean;
+}
+
+/** Uloží položku i její rozdělení. */
 export async function ulozPolozku(
   db: D1Database,
   vstup: VstupPolozky,
   kdo: string,
-): Promise<number> {
+): Promise<VysledekUlozeni> {
   // Do „před" patří i rozdělení mezi osoby — jinak by z historie nešlo poznat,
   // že se změnilo, kdo se na položce skládá.
   const pred =
@@ -523,6 +552,9 @@ export async function ulozPolozku(
     id = vlozeno.id;
   } else {
     if (pred === null) throw new ChybaVstupu('Položka už neexistuje — mezitím ji někdo smazal.');
+    // Uložení beze změny je no-op: nic nepřepisuje a hlavně nezakládá
+    // záznam v historii. Jinak by opakované kliknutí zaneslo audit šumem.
+    if (stejnaPolozka(pred as Record<string, unknown>, vstup)) return { id, zmeneno: false };
     await db
       .prepare(
         `update cost_items
@@ -571,7 +603,7 @@ export async function ulozPolozku(
   );
   await db.batch(davka);
 
-  return id;
+  return { id, zmeneno: true };
 }
 
 export async function smazPolozku(db: D1Database, id: number, kdo: string): Promise<void> {

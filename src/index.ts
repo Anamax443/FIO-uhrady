@@ -268,7 +268,17 @@ export default {
       try {
         if (request.method === 'GET' && path === '/admin') {
           const prehled = await nactiPrehled(env.DB);
-          return html(renderNaklady(prehled, new Date().toLocaleDateString('cs-CZ'), kdo, env.GIT_COMMIT ?? 'dev'));
+          const vybrano = Number(url.searchParams.get('vybrano') ?? '');
+          return html(
+            renderNaklady(
+              prehled,
+              new Date().toLocaleDateString('cs-CZ'),
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+              Number.isInteger(vybrano) && vybrano > 0 ? vybrano : null,
+              url.searchParams.get('stav'),
+            ),
+          );
         }
 
         if (request.method === 'GET' && path === '/admin/nastaveni') {
@@ -432,8 +442,8 @@ export default {
         }
 
         if (request.method === 'POST' && path === '/api/polozka') {
-          const id = await ulozPolozku(env.DB, overPolozku(await telo(request)), kdo);
-          return json({ ok: true, id });
+          const vysledek = await ulozPolozku(env.DB, overPolozku(await telo(request)), kdo);
+          return json({ ok: true, ...vysledek });
         }
 
         const smazat = path.match(/^\/api\/polozka\/(\d+)\/smazat$/);
