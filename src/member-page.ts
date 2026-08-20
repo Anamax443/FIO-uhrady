@@ -394,9 +394,27 @@ h2 { font-size: 15px; margin: 0 0 8px; }
   box-shadow: -10px 0 28px rgba(8, 14, 20, .22);
 }
 .panel.otevreno { display: flex; }
-.panel-hlava { display: flex; justify-content: space-between; align-items: center; position: sticky; top: -12px; background: var(--pozadi); padding: 4px 0 6px; margin: -4px 0 0; }
-.zavri { font: inherit; font-size: 18px; line-height: 1; background: var(--karta); border: 1px solid var(--linka); border-radius: 8px; padding: 5px 10px; color: var(--text); cursor: pointer; }
-.panel .karta { scroll-margin-top: 44px; }
+.panel-hlava { display: flex; align-items: center; gap: 10px; position: sticky; top: -12px; z-index: 1; background: var(--pozadi); padding: 6px 0 8px; margin: -6px 0 0; border-bottom: 1px solid var(--linka); }
+.panel-hlava .titulek { font-weight: 650; flex: 1; }
+.zavri, .zpet { font: inherit; line-height: 1; background: var(--karta); border: 1px solid var(--linka); border-radius: 8px; padding: 7px 10px; color: var(--text); cursor: pointer; }
+.zpet { font-size: 13.5px; color: var(--akcent); }
+
+/* Nabídka: hamburger ukáže, co se dá otevřít, ne všechno najednou.
+   Skryté je výchozí, ukazuje se třídou — stejně jako celý panel. */
+.menu { display: none; flex-direction: column; gap: 8px; }
+.menu.aktivni { display: flex; }
+.menu button {
+  font: inherit; text-align: left; cursor: pointer; color: var(--text);
+  background: var(--karta); border: 1px solid var(--linka); border-radius: 10px;
+  padding: 13px 14px; display: flex; flex-direction: column; gap: 2px;
+}
+.menu button:hover { border-color: var(--akcent); }
+.menu button b { font-weight: 600; }
+.menu button small { color: var(--tlumene); font-size: 13px; }
+
+/* Sekce se přepínají třídou, ne atributem — na specificitě to stát nesmí. */
+.sekce { display: none; }
+.sekce.aktivni { display: block; }
 </style>
 </head>
 <body>
@@ -460,7 +478,7 @@ h2 { font-size: 15px; margin: 0 0 8px; }
       Běžící měsíc se do dluhu počítá až dnem splatnosti.
     </p>
     <div class="prokliky">
-      <button class="tlacitko" type="button" data-otevri="s-platby">Jednotlivé platby</button>
+      <button class="tlacitko" type="button" data-otevri="s-platby">Moje platby</button>
     </div>
   </section>
 
@@ -476,15 +494,34 @@ h2 { font-size: 15px; margin: 0 0 8px; }
   <button class="zaves" id="zaves" type="button" aria-label="Zavřít podrobnosti" hidden></button>
   <aside class="panel" id="panel" aria-label="Podrobnosti" hidden>
     <div class="panel-hlava">
-      <b>Podrobnosti</b>
+      <button class="zpet" id="zpet" type="button" hidden>← Zpět</button>
+      <span class="titulek" id="panel-titulek">Podrobnosti</span>
       <button class="zavri" id="zavri" type="button" aria-label="Zavřít">✕</button>
     </div>
+
+    <nav class="menu aktivni" id="menu">
+      ${
+        qr === null
+          ? ''
+          : `<button type="button" data-sekce="s-qr">
+        <b>QR platba</b><small>naskenuj v bance a zaplať doplatek</small>
+      </button>`
+      }
+      <button type="button" data-sekce="s-platby">
+        <b>Moje platby</b><small>co a kdy přišlo na účet</small>
+      </button>
+      <button type="button" data-sekce="s-podil">
+        <b>Můj podíl po měsících</b><small>kolik na mě padlo z nákladů domu</small>
+      </button>
+      <button type="button" data-sekce="s-naklady">
+        <b>Náklady domu na rok</b><small>co dům stojí a z čeho se to skládá</small>
+      </button>
+    </nav>
 
     ${
       qr === null
         ? ''
-        : `<section class="karta" id="s-qr">
-      <h2>QR platba</h2>
+        : `<section class="karta sekce" id="s-qr" data-nazev="QR platba">
       ${qr}
       <p class="pozn">
         Naskenuj v mobilní bance — částka i variabilní symbol se vyplní samy.
@@ -493,13 +530,11 @@ h2 { font-size: 15px; margin: 0 0 8px; }
     </section>`
     }
 
-    <section class="karta" id="s-platby">
-      <h2>Moje platby</h2>
+    <section class="karta sekce" id="s-platby" data-nazev="Moje platby">
       ${radkyPlateb}
     </section>
 
-    <section class="karta" id="s-podil">
-      <h2>Můj podíl po měsících</h2>
+    <section class="karta sekce" id="s-podil" data-nazev="Můj podíl po měsících">
       ${graf(vyvoj)}
       <p class="pozn">
         Kolik na mě v tom měsíci připadlo z nákladů domu — to je něco jiného než záloha.
@@ -508,8 +543,7 @@ h2 { font-size: 15px; margin: 0 0 8px; }
       </p>
     </section>
 
-    <section class="karta" id="s-naklady">
-      <h2>Náklady domu na rok</h2>
+    <section class="karta sekce" id="s-naklady" data-nazev="Náklady domu na rok">
       <div class="rozpis">
         <span class="soucet">Celkem</span><span class="cislo soucet">${formatKc(rocne)}</span>
       </div>
@@ -528,6 +562,20 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 const panel = document.getElementById('panel');
 const zaves = document.getElementById('zaves');
 const ham = document.getElementById('ham');
+const menu = document.getElementById('menu');
+const zpet = document.getElementById('zpet');
+const titulek = document.getElementById('panel-titulek');
+const sekce = [...document.querySelectorAll('.sekce')];
+
+/** Uvnitř panelu: buď nabídka, nebo jedna vybraná věc. Nikdy obojí. */
+function ukaz(kam) {
+  const cil = kam ? document.getElementById(kam) : null;
+  sekce.forEach((s) => s.classList.toggle('aktivni', s === cil));
+  menu.classList.toggle('aktivni', cil === null);
+  zpet.hidden = cil === null;
+  titulek.textContent = cil === null ? 'Podrobnosti' : (cil.dataset.nazev || 'Podrobnosti');
+  panel.scrollTop = 0;
+}
 
 function prepni(otevrit, kam) {
   panel.classList.toggle('otevreno', otevrit);
@@ -539,18 +587,22 @@ function prepni(otevrit, kam) {
   // Pozadí se pod otevřeným panelem nesmí scrollovat, jinak si na telefonu
   // člověk posune stránku a neví, kam se vrátil.
   document.body.style.overflow = otevrit ? 'hidden' : '';
-  if (!otevrit) { ham.focus(); return; }
-  const cil = kam ? document.getElementById(kam) : null;
-  // Bez skoku na začátek by panel zůstal tam, kde ho člověk minule opustil.
-  panel.scrollTop = 0;
-  if (cil) cil.scrollIntoView({ block: 'start' });
+  if (otevrit) ukaz(kam || null); else ham.focus();
 }
 
+// Hamburger otevře nabídku; proklik z hlavní stránky rovnou tu jednu věc.
 ham.addEventListener('click', () => prepni(true));
+zpet.addEventListener('click', () => ukaz(null));
 zaves.addEventListener('click', () => prepni(false));
 document.getElementById('zavri').addEventListener('click', () => prepni(false));
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && panel.classList.contains('otevreno')) prepni(false);
+  if (e.key !== 'Escape' || !panel.classList.contains('otevreno')) return;
+  // Escape napřed zpátky do nabídky, teprve pak ven — jinak by z podrobnosti
+  // vyhodilo rovnou na hlavní stránku a člověk by hledal, kde skončil.
+  if (zpet.hidden) prepni(false); else ukaz(null);
+});
+document.querySelectorAll('[data-sekce]').forEach((b) => {
+  b.addEventListener('click', () => ukaz(b.dataset.sekce));
 });
 document.querySelectorAll('[data-otevri]').forEach((b) => {
   b.addEventListener('click', () => prepni(true, b.dataset.otevri));
