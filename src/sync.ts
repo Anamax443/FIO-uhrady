@@ -6,7 +6,8 @@
  * a „nepovedlo se", ne jen ticho.
  */
 import { najdiOsobu, stahniPohyby, type PohybFio } from './fio.js';
-import { nactiOsoby } from './db.js';
+import { nactiOsoby, ulozNastaveni, ulozNastaveniTise } from './db.js';
+import type { UcetFio } from './fio.js';
 
 export interface VysledekSyncu {
   od: string;
@@ -37,8 +38,13 @@ export async function synchronizuj(db: D1Database, token: string, dnuZpet: numbe
   const behId = beh?.id ?? null;
 
   try {
-    const pohyby = await stahniPohyby(token, od, doDne);
+    const { pohyby, ucet } = await stahniPohyby(token, od, doDne);
     const osoby = await nactiOsoby(db);
+
+    // Číslo účtu a IBAN si bereme z API, ať se nikde neopisují ručně —
+    // IBAN pak stačí na QR platbu. Zůstatek se mění pořád, proto se ukládá
+    // potichu; změna čísla účtu je ale událost a patří do historie.
+    await ulozUdajeUctu(db, ucet);
 
     let novych = 0;
     let sparovanych = 0;
@@ -120,4 +126,34 @@ async function ulozPohyb(
       .run();
   }
   return 0;
+}
+
+/** Uloží hlavičku účtu ze stahování. Zůstatek bez auditu, číslo účtu s ním. */
+async function ulozUdajeUctu(db: D1Database, ucet: UcetFio): Promise<void> {
+  if (ucet.zustatek !== null) {
+    await ulozNastaveniTise(db, 'zustatek_uctu', String(ucet.zustatek));
+    await ulozNastaveniTise(db, 'zustatek_k', new Date().toISOString());
+  }
+
+  for (const [klic, hodnota] of [
+    ['ucet_domu', ucet.ucet],
+    ['iban_domu', ucet.iban],
+    ['bic_domu', ucet.bic],
+  ] as const) {
+    if (hodnota === null) continue;
+    const stary = await db
+      .prepare('select hodnota from settings where klic = ?')
+      .bind(klic)
+      .first<{ hodnota: string }>();
+    if (stary?.hodnota === hodnota) continue;
+    await ulozNastaveni(
+      db,
+      klic,
+      hodnota,
+      'stahování z Fio',
+      stary === null
+        ? `Z API zjištěn účet domácnosti (${klic}): ${hodnota}`
+        : `Změnil se účet domácnosti (${klic}): ${stary.hodnota} → ${hodnota}`,
+    );
+  }
 }

@@ -401,6 +401,20 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
   };
 }
 
+/**
+ * Uloží nastavení bez záznamu do historie. Jen pro hodnoty, které se mění
+ * samy pořád dokola (zůstatek účtu) — u nich by audit jen zaplevelil log.
+ */
+export async function ulozNastaveniTise(db: D1Database, klic: string, hodnota: string): Promise<void> {
+  await db
+    .prepare(
+      `insert into settings (klic, hodnota, changed_at) values (?, ?, datetime('now'))
+       on conflict(klic) do update set hodnota = excluded.hodnota, changed_at = excluded.changed_at`,
+    )
+    .bind(klic, hodnota)
+    .run();
+}
+
 /** Uloží jednu položku nastavení a zapíše, kdo ji změnil. */
 export async function ulozNastaveni(
   db: D1Database,

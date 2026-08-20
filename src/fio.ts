@@ -31,6 +31,18 @@ export interface PohybFio {
 
 export class ChybaFio extends Error {}
 
+/**
+ * Hlavička výpisu — číslo účtu, IBAN a zůstatek. Bere se z API, aby se
+ * nikde neopisovala ručně; IBAN pak stačí na QR platbu.
+ */
+export interface UcetFio {
+  ucet: string | null;      // '1234567890/2010'
+  iban: string | null;
+  bic: string | null;
+  mena: string | null;
+  zustatek: number | null;  // haléře
+}
+
 interface Pole {
   value: string | number | null;
 }
@@ -43,8 +55,12 @@ const text = (z: Zaznam, klic: string): string | null => {
   return String(v).trim();
 };
 
-/** Stáhne pohyby za období. `od`/`do` ve tvaru 'YYYY-MM-DD'. */
-export async function stahniPohyby(token: string, od: string, doDne: string): Promise<PohybFio[]> {
+/** Stáhne pohyby za období i hlavičku účtu. `od`/`do` ve tvaru 'YYYY-MM-DD'. */
+export async function stahniPohyby(
+  token: string,
+  od: string,
+  doDne: string,
+): Promise<{ pohyby: PohybFio[]; ucet: UcetFio }> {
   const odpoved = await fetch(`${ZAKLAD}/periods/${token}/${od}/${doDne}/transactions.json`);
 
   if (!odpoved.ok) {
@@ -59,11 +75,27 @@ export async function stahniPohyby(token: string, od: string, doDne: string): Pr
   }
 
   const data = (await odpoved.json()) as {
-    accountStatement?: { transactionList?: { transaction?: Zaznam[] } | null };
+    accountStatement?: {
+      info?: Record<string, string | number | null>;
+      transactionList?: { transaction?: Zaznam[] } | null;
+    };
   };
   const seznam = data.accountStatement?.transactionList?.transaction ?? [];
+  const info = data.accountStatement?.info ?? {};
 
-  return seznam.map((z): PohybFio => {
+  const cislo = info['accountId'] === undefined || info['accountId'] === null ? null : String(info['accountId']);
+  const kodBanky = info['bankId'] === undefined || info['bankId'] === null ? null : String(info['bankId']);
+  const zustatek = info['closingBalance'];
+
+  const ucet: UcetFio = {
+    ucet: cislo === null ? null : kodBanky === null ? cislo : `${cislo}/${kodBanky}`,
+    iban: info['iban'] === undefined || info['iban'] === null ? null : String(info['iban']),
+    bic: info['bic'] === undefined || info['bic'] === null ? null : String(info['bic']),
+    mena: info['currency'] === undefined || info['currency'] === null ? null : String(info['currency']),
+    zustatek: typeof zustatek === 'number' ? Math.round(zustatek * 100) : null,
+  };
+
+  const pohyby = seznam.map((z): PohybFio => {
     const castka = Number(z['column1']?.value ?? 0);
     const ucet = text(z, 'column2');
     const kod = text(z, 'column3');
@@ -83,6 +115,8 @@ export async function stahniPohyby(token: string, od: string, doDne: string): Pr
       raw: JSON.stringify(z),
     };
   });
+
+  return { pohyby, ucet };
 }
 
 export interface Shoda {
