@@ -28,6 +28,14 @@ interface Radek {
   castka: number;
   naOsobu: Map<number, number>;
   nerozdeleno: number;
+  /**
+   * Vstupuje řádek do součtů za tenhle měsíc?
+   *
+   * Jednorázová položka se ukazuje s celou částkou, ale do součtu patří jen
+   * v měsíci svého data. Bez téhle značky by přepočet součtů v prohlížeči
+   * (po filtrování) vyšel jinak než na serveru.
+   */
+  doSouctu: boolean;
 }
 
 export interface Souhrn {
@@ -110,7 +118,7 @@ export function spocitej(prehled: Prehled, mesic: string = mesicNyni()): Souhrn 
     // Nula je platná částka, ne chybějící údaj — nedokončené je jen to,
     // co se nerozdělilo celé.
     if (nerozdeleno !== 0) nedokoncenych++;
-    radky.push({ polozka, jednorazovy, castka, naOsobu, nerozdeleno });
+    radky.push({ polozka, jednorazovy, castka, naOsobu, nerozdeleno, doSouctu: !jednorazovy || vMesici });
   }
 
   return {
@@ -181,6 +189,15 @@ table { min-width: 760px; }
 .col-druh { width: 104px; color: var(--text-dim); }
 .col-stav { width: 116px; }
 .col-kat { width: 124px; color: var(--text-dim); }
+thead tr.radici th { cursor: pointer; user-select: none; white-space: nowrap; }
+thead tr.radici th:hover { background: var(--hover); }
+thead tr.radici th .sipka { display: inline-block; width: 10px; margin-left: 3px; color: var(--accent); }
+thead tr.radici th[data-smer="asc"] .sipka::after { content: "▲"; font-size: 8px; }
+thead tr.radici th[data-smer="desc"] .sipka::after { content: "▼"; font-size: 8px; }
+thead tr.filtry th { padding: 3px 4px; background: var(--chrome-hi); border-bottom: 1px solid var(--border); position: sticky; top: 22px; z-index: 2; }
+thead tr.filtry input, thead tr.filtry select { width: 100%; min-width: 0; font-size: 11.5px; padding: 2px 4px; }
+.filtr-info { display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-bottom: 1px solid var(--border); background: var(--accent-soft); }
+.filtr-info[hidden] { display: none; }
 .kategorie { border-top: 1px solid var(--border); }
 .kat-telo { padding: 9px 12px 12px; display: flex; flex-direction: column; gap: 7px; max-width: 720px; }
 .kat { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: baseline; font-variant-numeric: tabular-nums; }
@@ -254,12 +271,14 @@ function grid(prehled: Prehled, s: Souhrn): string {
     </div>`;
   }
 
-  const hlavicky = prehled.osoby
+  const hlavickyOsob = prehled.osoby
     .map((o) => {
       const rodic = prehled.osoby.find((x) => x.id === (o.pod_member_id ?? null));
-      return `<th class="osoba col-num" title="${
-        rodic ? `podíl nese ${esc(rodic.jmeno)}` : 'nese svůj podíl sám'
-      }">${esc(o.jmeno)}${rodic ? `<small>s ${esc(rodic.jmeno)}</small>` : ''}</th>`;
+      return `<th class="osoba col-num" data-radit="osoba-${o.id}" tabindex="0" role="button" title="${
+        rodic
+          ? `podíl nese ${esc(rodic.jmeno)} — klikni pro seřazení`
+          : 'nese svůj podíl sám — klikni pro seřazení'
+      }">${esc(o.jmeno)}${rodic ? `<small>s ${esc(rodic.jmeno)}</small>` : ''}<span class="sipka"></span></th>`;
     })
     .join('');
 
@@ -270,7 +289,7 @@ function grid(prehled: Prehled, s: Souhrn): string {
         .map((o) => {
           const v = r.naOsobu.get(o.id) ?? 0;
           const text = v === 0 ? '—' : r.jednorazovy ? formatKcZnamenko(v) : formatKc(v);
-          return `<td class="col-num osoba-cell${v === 0 ? ' zero' : ''}${v < 0 ? ' minus' : ''}" data-popis="${esc(o.jmeno)}">${text}</td>`;
+          return `<td class="col-num osoba-cell${v === 0 ? ' zero' : ''}${v < 0 ? ' minus' : ''}" data-popis="${esc(o.jmeno)}" data-klic="osoba-${o.id}" data-v="${v}">${text}</td>`;
         })
         .join('');
 
@@ -282,51 +301,94 @@ function grid(prehled: Prehled, s: Souhrn): string {
       const kdy =
         r.jednorazovy && p.datum ? p.datum.split('-').reverse().join('. ') : popisPeriody(p.perioda);
 
-      return `<tr data-id="${p.id}"${i === 0 ? ' data-selected="true"' : ''} tabindex="0">
-  <td class="nazev">${esc(p.nazev)}${p.poznamka ? ` <span class="pozn">— ${esc(p.poznamka)}</span>` : ''}</td>
-  <td class="col-kat" data-popis="Kategorie">${
-    p.kategorie ? esc(p.kategorie) : '<span class="pozn">bez kategorie</span>'
+      const kategorie = p.kategorie ?? '';
+
+      return `<tr data-id="${p.id}"${i === 0 ? ' data-selected="true"' : ''} tabindex="0"
+    data-kat="${esc(kategorie)}" data-druh="${p.druh}" data-per="${p.perioda}"
+    data-stav="${r.nerozdeleno === 0 ? 'rozdeleno' : 'zbyva'}"
+    data-jedno="${r.jednorazovy ? '1' : '0'}" data-souctu="${r.doSouctu ? '1' : '0'}">
+  <td class="nazev" data-klic="nazev">${esc(p.nazev)}${p.poznamka ? ` <span class="pozn">— ${esc(p.poznamka)}</span>` : ''}</td>
+  <td class="col-kat" data-popis="Kategorie" data-klic="kat">${
+    kategorie ? esc(kategorie) : '<span class="pozn">bez kategorie</span>'
   }</td>
-  <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
-  <td class="col-per" data-popis="Kdy">${esc(kdy)}</td>
-  <td class="col-num" data-popis="Za období">${formatKc(p.castka_celkem)}</td>
-  <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně">${r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)}</td>
+  <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh" data-klic="druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
+  <td class="col-per" data-popis="Kdy" data-klic="per">${esc(kdy)}</td>
+  <td class="col-num" data-popis="Za období" data-klic="obdobi" data-v="${p.castka_celkem}">${formatKc(p.castka_celkem)}</td>
+  <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně" data-klic="mesicne" data-v="${r.castka}">${r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)}</td>
   ${bunky}
-  <td class="col-stav" data-popis="Stav">${stav}</td>
+  <td class="col-stav" data-popis="Stav" data-klic="stav" data-v="${r.nerozdeleno}">${stav}</td>
 </tr>`;
     })
     .join('\n');
 
-  const soucty = (mapa: Map<number, number>, seZnamenkem: boolean): string =>
+  const soucty = (mapa: Map<number, number>, seZnamenkem: boolean, klic: string): string =>
     prehled.osoby
       .map((o) => {
         const v = mapa.get(o.id) ?? 0;
-        return `<td class="col-num osoba-cell${v < 0 ? ' minus' : ''}">${
+        return `<td class="col-num osoba-cell${v < 0 ? ' minus' : ''}" data-soucet="${klic}-${o.id}">${
           seZnamenkem ? formatKcZnamenko(v) : formatKc(v)
         }</td>`;
       })
       .join('');
 
+  // Nabídky filtrů se berou z toho, co v tabulce opravdu je — vypsat pevný
+  // seznam by znamenalo nabízet kategorie, které nikdo nepoužil.
+  const volby = (hodnoty: string[], prazdne: string): string =>
+    [...new Set(hodnoty)]
+      .sort((a, b) => a.localeCompare(b, 'cs'))
+      .map((h) => `<option value="${esc(h)}">${esc(h === '' ? prazdne : h)}</option>`)
+      .join('');
+
+  const filtrVolba = (klic: string, hodnoty: string[], prazdne: string, popis: string): string =>
+    `<select data-filtr="${klic}" aria-label="Filtr: ${esc(popis)}" title="Filtrovat podle ${esc(popis)}">
+      <option value="">vše</option>${volby(hodnoty, prazdne)}
+    </select>`;
+
+  const seradit = (klic: string, popis: string, tridy = ''): string =>
+    `<th class="${tridy}" data-radit="${klic}" tabindex="0" role="button"
+         title="Seřadit podle ${esc(popis)}">${esc(popis)}<span class="sipka"></span></th>`;
+
   return `<div class="gridwrap">
   <table id="grid">
-    <thead><tr>
-      <th>Položka</th><th class="col-kat">Kategorie</th><th class="col-druh">Druh</th><th class="col-per">Perioda / datum</th>
-      <th class="col-num">Za období</th><th class="col-num">Měsíčně / jednorázově</th>
-      ${hlavicky}
-      <th class="col-stav">Stav</th>
-    </tr></thead>
+    <thead>
+      <tr class="radici">
+        ${seradit('nazev', 'Položka')}
+        ${seradit('kat', 'Kategorie', 'col-kat')}
+        ${seradit('druh', 'Druh', 'col-druh')}
+        ${seradit('per', 'Perioda / datum', 'col-per')}
+        ${seradit('obdobi', 'Za období', 'col-num')}
+        ${seradit('mesicne', 'Měsíčně / jednorázově', 'col-num')}
+        ${hlavickyOsob}
+        ${seradit('stav', 'Stav', 'col-stav')}
+      </tr>
+      <tr class="filtry">
+        <th><input type="search" data-filtr="nazev" placeholder="hledat v názvu…" aria-label="Filtr: název" title="Filtrovat podle názvu a poznámky" /></th>
+        <th>${filtrVolba('kat', prehled.polozky.map((p) => p.kategorie ?? ''), 'bez kategorie', 'kategorie')}</th>
+        <th>${filtrVolba('druh', prehled.polozky.map((p) => popisDruhu(p.druh)), '', 'druhu')}</th>
+        <th>${filtrVolba('per', prehled.polozky.map((p) => popisPeriody(p.perioda)), '', 'periody')}</th>
+        <th></th><th></th>
+        ${prehled.osoby.map(() => '<th></th>').join('')}
+        <th>
+          <select data-filtr="stav" aria-label="Filtr: stav" title="Filtrovat podle stavu rozdělení">
+            <option value="">vše</option>
+            <option value="rozdeleno">rozděleno</option>
+            <option value="zbyva">zbývá rozdělit</option>
+          </select>
+        </th>
+      </tr>
+    </thead>
     <tbody>${radky}</tbody>
     <tfoot>
       <tr>
         <td>Pravidelné náklady měsíčně</td><td></td><td></td><td></td><td></td>
-        <td class="col-num">${formatKc(s.mesicneCelkem)}</td>
-        ${soucty(s.mesicneOsoba, false)}
+        <td class="col-num" data-soucet="mesicne">${formatKc(s.mesicneCelkem)}</td>
+        ${soucty(s.mesicneOsoba, false, 'mesicne')}
         <td></td>
       </tr>
       <tr>
         <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td><td></td>
-        <td class="col-num${s.saldoCelkem < 0 ? ' minus' : ''}">${formatKcZnamenko(s.saldoCelkem)}</td>
-        ${soucty(s.saldoOsoba, true)}
+        <td class="col-num${s.saldoCelkem < 0 ? ' minus' : ''}" data-soucet="saldo">${formatKcZnamenko(s.saldoCelkem)}</td>
+        ${soucty(s.saldoOsoba, true, 'saldo')}
         <td></td>
       </tr>
     </tfoot>
@@ -366,13 +428,14 @@ function podleKategorii(s: Souhrn): string {
 
   return `<section class="kategorie">
     <div class="panehead"><svg class="icon icon-sm"><use href="#i-grid"/></svg>Po kategoriích
-      <span class="count">${formatKc(s.mesicneCelkem)} měsíčně · ${formatKc(s.rocneCelkem)} ročně</span>
+      <span class="count" id="kat-celkem">${formatKc(s.mesicneCelkem)} měsíčně · ${formatKc(s.rocneCelkem)} ročně</span>
     </div>
     <div class="kat-telo">
-      ${radky}
+      <div id="kat-radky">${radky}</div>
       <p class="pozn">
         Jen pravidelné a rozpouštěné náklady — jednorázové položky do ročního součtu nepatří.
-        Tohle je ten samý pohled, jaký vidí člen na svém přehledu.
+        Tohle je ten samý pohled, jaký vidí člen na svém přehledu, a <b>počítá se z toho,
+        co je zrovna vidět v tabulce</b> — filtr se do něj promítne.
       </p>
     </div>
   </section>`;
@@ -520,6 +583,10 @@ export function renderNaklady(
         <button class="tbtn" type="button" id="t-smazat"><svg class="icon icon-sm"><use href="#i-trash"/></svg>Smazat</button>
         <span class="sep"></span>
         <a class="tbtn" href="/admin/export.csv"><svg class="icon icon-sm"><use href="#i-export"/></svg>Export CSV</a>
+      </div>
+      <div class="filtr-info" id="filtr-info" hidden>
+        <span id="filtr-info-text"></span>
+        <button class="tbtn" type="button" id="filtr-zrusit" title="Vrátí tabulku na všechny položky">Zrušit filtr</button>
       </div>
       ${grid(prehled, s)}
     </section>
@@ -781,16 +848,155 @@ document.querySelectorAll('#grid tbody tr').forEach((tr) => {
 q('.detail').addEventListener('input', prepocitej);
 q('.detail').addEventListener('change', prepocitej);
 
-el('filtr').addEventListener('input', (e) => {
-  const dotaz = e.target.value.trim().toLowerCase();
-  let videt = 0;
-  document.querySelectorAll('#grid tbody tr').forEach((tr) => {
-    const shoda = tr.textContent.toLowerCase().includes(dotaz);
-    tr.style.display = shoda ? '' : 'none';
-    if (shoda) videt++;
+/* ---------- řazení a filtry ---------- */
+
+const telo = document.querySelector('#grid tbody');
+const vsechnyRadky = [...document.querySelectorAll('#grid tbody tr')];
+let razeni = { klic: null, smer: 1 };
+
+const kc = (halere) =>
+  new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+    .format(halere / 100);
+const kcZn = (halere) => {
+  const koruny = Math.round(halere / 100);
+  return (koruny > 0 ? '+' : koruny < 0 ? '−' : '') + kc(Math.abs(halere));
+};
+
+/** Text buňky pro řazení i pro textový filtr. */
+function hodnota(tr, klic) {
+  const bunka = tr.querySelector('[data-klic="' + klic + '"]');
+  if (!bunka) return '';
+  return bunka.dataset.v !== undefined ? Number(bunka.dataset.v) : bunka.textContent.trim();
+}
+
+function projdeFiltrem(tr) {
+  const hledane = el('filtr').value.trim().toLowerCase();
+  if (hledane && !tr.textContent.toLowerCase().includes(hledane)) return false;
+  for (const pole of document.querySelectorAll('[data-filtr]')) {
+    const chtene = pole.value.trim();
+    if (chtene === '') continue;
+    const klic = pole.dataset.filtr;
+    // Volby porovnávají celou hodnotu, textové pole hledá kdekoli uvnitř.
+    const je = klic === 'stav' ? tr.dataset.stav : String(hodnota(tr, klic));
+    const shoda =
+      pole.tagName === 'SELECT'
+        ? je.trim() === chtene || (chtene === 'bez kategorie' && je.trim() === 'bez kategorie')
+        : je.toLowerCase().includes(chtene.toLowerCase());
+    if (!shoda) return false;
+  }
+  return true;
+}
+
+/**
+ * Součty i souhrn po kategoriích se počítají **z viditelných řádků**.
+ * Kdyby zůstaly serverové, filtr by ukazoval výběr položek a pod ním celek
+ * za všechno — a nikdo by nepoznal, že spolu nesouvisí.
+ */
+function prepoctiSoucty(videt) {
+  const soucty = new Map();
+  const pricti = (klic, castka) => soucty.set(klic, (soucty.get(klic) ?? 0) + castka);
+
+  for (const tr of videt) {
+    if (tr.dataset.souctu !== '1') continue;
+    const kam = tr.dataset.jedno === '1' ? 'saldo' : 'mesicne';
+    pricti(kam, hodnota(tr, 'mesicne'));
+    for (const bunka of tr.querySelectorAll('[data-klic^="osoba-"]')) {
+      pricti(kam + '-' + bunka.dataset.klic.slice(6), Number(bunka.dataset.v));
+    }
+  }
+
+  for (const bunka of document.querySelectorAll('[data-soucet]')) {
+    const v = soucty.get(bunka.dataset.soucet) ?? 0;
+    const jeSaldo = bunka.dataset.soucet.startsWith('saldo');
+    bunka.textContent = jeSaldo ? kcZn(v) : kc(v);
+    bunka.classList.toggle('minus', v < 0);
+  }
+
+  // Po kategoriích — jen pravidelné a rozpouštěné, stejně jako na serveru.
+  // Když žádná kategorie není, souhrn se nevykresluje a není co přepočítávat.
+  if (!el('kat-radky')) return;
+  const kategorie = new Map();
+  for (const tr of videt) {
+    if (tr.dataset.jedno === '1') continue;
+    const castka = hodnota(tr, 'mesicne');
+    if (castka === 0) continue;
+    const nazev = tr.dataset.kat || 'Bez kategorie';
+    kategorie.set(nazev, (kategorie.get(nazev) ?? 0) + castka);
+  }
+  const serazene = [...kategorie.entries()].sort((a, b) => b[1] - a[1]);
+  const max = Math.max(...serazene.map(([, v]) => v), 1);
+  const celkem = serazene.reduce((a, [, v]) => a + v, 0);
+  el('kat-radky').innerHTML = serazene
+    .map(
+      ([nazev, castka]) =>
+        '<div class="kat"><span class="jmeno">' + nazev.replace(/[<>&]/g, '') + '</span>' +
+        '<span class="mesicne">' + kc(castka) + '</span>' +
+        '<span class="rocne">' + kc(castka * 12) + ' / rok</span>' +
+        '<i style="width:' + Math.round((castka / max) * 100) + '%"></i></div>',
+    )
+    .join('');
+  el('kat-celkem').textContent = kc(celkem) + ' měsíčně · ' + kc(celkem * 12) + ' ročně';
+}
+
+function pouzij() {
+  const videt = vsechnyRadky.filter((tr) => {
+    const ok = projdeFiltrem(tr);
+    tr.style.display = ok ? '' : 'none';
+    return ok;
   });
-  el('pocet').textContent = videt + (videt === 1 ? ' položka' : videt >= 2 && videt <= 4 ? ' položky' : ' položek');
+
+  if (razeni.klic !== null) {
+    const serazene = [...videt].sort((a, b) => {
+      const x = hodnota(a, razeni.klic);
+      const y = hodnota(b, razeni.klic);
+      const r = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'cs');
+      return r * razeni.smer;
+    });
+    serazene.forEach((tr) => telo.appendChild(tr));
+  }
+
+  prepoctiSoucty(videt);
+
+  el('pocet').textContent =
+    videt.length + (videt.length === 1 ? ' položka' : videt.length >= 2 && videt.length <= 4 ? ' položky' : ' položek') +
+    (videt.length === vsechnyRadky.length ? '' : ' z ' + vsechnyRadky.length);
+
+  const filtrovano = videt.length !== vsechnyRadky.length;
+  el('filtr-info').hidden = !filtrovano;
+  if (filtrovano) {
+    el('filtr-info-text').textContent =
+      'Filtr je zapnutý — součty i kategorie počítají jen z ' + videt.length + ' zobrazených položek.';
+  }
+}
+
+// Bez tabulky (žádná položka) není co řadit ani filtrovat.
+if (telo !== null) {
+document.querySelectorAll('[data-radit]').forEach((th) => {
+  const radit = () => {
+    const klic = th.dataset.radit;
+    razeni = { klic, smer: razeni.klic === klic && razeni.smer === 1 ? -1 : 1 };
+    document.querySelectorAll('[data-radit]').forEach((x) => x.removeAttribute('data-smer'));
+    th.dataset.smer = razeni.smer === 1 ? 'asc' : 'desc';
+    pouzij();
+  };
+  th.addEventListener('click', radit);
+  th.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); radit(); }
+  });
 });
+
+document.querySelectorAll('[data-filtr]').forEach((pole) => {
+  pole.addEventListener('input', pouzij);
+  pole.addEventListener('change', pouzij);
+});
+el('filtr').addEventListener('input', pouzij);
+
+el('filtr-zrusit').addEventListener('click', () => {
+  document.querySelectorAll('[data-filtr]').forEach((pole) => { pole.value = ''; });
+  el('filtr').value = '';
+  pouzij();
+});
+}
 
 // Po návratu z uložení označ řádek a řekni, co se stalo.
 if (vybraneId !== null) {
