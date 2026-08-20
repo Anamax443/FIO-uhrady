@@ -3,11 +3,15 @@
  * jen jeho otisk (PBKDF2-SHA256, 100 000 iterací) a náhodná sůl. Stejné
  * parametry počítá i Worker v src/auth.ts.
  *
- *   node scripts/set-pin.mjs 1258 > pin.sql
- *   npx wrangler d1 execute fio-uhrady --remote --file pin.sql
- *   Remove-Item pin.sql
+ *   node scripts/set-pin.mjs 1258
  *
- * Soubor s SQL po použití smaž — je v něm otisk, ne PIN, ale nemá co povalovat.
+ * Skript vypíše dva hotové příkazy, které stačí zkopírovat a spustit.
+ * **`--file` na ostré databázi nepoužívej** — Cloudflare ho odmítá
+ * (`Authentication error [code: 10000]`, jde přes import endpoint).
+ * Zapomenutý PIN se řeší právě tudy; poslat se nedá, uložený je jen otisk.
+ *
+ * Do souboru se to dá pořád přesměrovat (`> pin.sql`) — příkazy jdou na
+ * chybový výstup, aby SQL zůstalo čisté. Soubor pak smaž, nemá co povalovat.
  */
 import { pbkdf2Sync, randomBytes } from 'node:crypto';
 
@@ -29,3 +33,15 @@ const uloz = (klic, hodnota) =>
 console.log('-- Nastavení PINu do správy. Vygenerováno scripts/set-pin.mjs.');
 console.log(uloz('admin_pin_salt', sul));
 console.log(uloz('admin_pin_hash', otisk));
+
+// Hotové příkazy jdou na chybový výstup, aby `> pin.sql` zůstalo čisté SQL.
+const prikaz = (klic, hodnota) =>
+  `npx wrangler d1 execute fio-uhrady --remote --command "insert into settings (klic, hodnota, changed_at) ` +
+  `values ('${klic}', '${hodnota}', datetime('now')) on conflict(klic) do update set hodnota = excluded.hodnota, ` +
+  `changed_at = excluded.changed_at"`;
+
+console.error('\nSpusť tyhle dva příkazy (oba, sůl i otisk patří k sobě):\n');
+console.error(prikaz('admin_pin_salt', sul));
+console.error('');
+console.error(prikaz('admin_pin_hash', otisk));
+console.error('\nPak se ve správě přihlas novým PINem. Staré přihlášení platí do vypršení cookie (12 h).');
