@@ -772,7 +772,7 @@ ${FAVICON}</head>
 
         const s = await stavVyrovnani(env.DB);
         const { prehled, nastaveni, uzaverky } = s;
-        const platby = await platbyOsoby(env.DB, osoba.id);
+        const platby = await platbyOsoby(env.DB, osoba.id, 300);
 
         const { radky } = vyrovnani(prehled, s.zaplaceno, s.zalohy, nastaveni, uzaverky, s.zustatky);
         // Nezletilé dítě nemá vlastní řádek — ukáže se ten, kdo za něj závazek nese.
@@ -790,6 +790,7 @@ ${FAVICON}</head>
             muj,
             vyvojPodilu(prehled, uzaverky, nastaveni, muj.osoba.id),
             platby,
+            s.zalohy,
             prehled,
             nastaveni,
             iban?.hodnota ?? null,

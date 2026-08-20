@@ -2,6 +2,30 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — osobní přehled: měsíc po měsíci na první straně, zbytek do panelu
+
+Zpětná vazba od uživatele: na první straně má být **aktuální stav a jednotlivé
+měsíce má dáti / dal**. Roční náklady domu ani QR nejsou tak důležité, aby
+zabíraly první obrazovku — patří pod hamburger, ale musí na ně jít prokliknout.
+
+**První strana** = velké číslo „zbývá doplatit" + tabulka **Měsíc po měsíci**
+(`maDalPoMesicich`): co měl ten měsíc poslat (záloha platná v tom měsíci)
+× co v něm doopravdy přišlo na účet, s barevným stavem (zaplaceno / chybí X /
+zatím nepřišlo / ještě není splatné). Pod tím součty a rovnou i výsledek.
+
+**Součty musí sedět na číslo nahoře**, jinak stránka vypadá rozbitě. Do celkově
+zaplaceného se počítá i to, co člověk pořídil **ze svého** — ve výpisu z účtu
+to není, takže se přiznává zvlášť řádkem „Zaplaceno mimo účet".
+
+**Panel pod hamburgerem**: QR platba, Moje platby, Můj podíl po měsících,
+Náklady domu na rok. Z první strany se do každé sekce dá prokliknout
+(`data-otevri`), panel na ni rovnou odscrolluje. Zavírá se křížkem, klikem
+mimo i Escapem; pozadí se pod ním nescrolluje.
+
+Ověřeno lokálně na vzorku (březen–srpen, jeden měsíc částečně, jeden vynechaný):
+36 700 − 21 200 = 15 500 sedí na velké číslo, na první straně nezůstal QR,
+graf ani položky nákladů.
+
 ## 2026-08-20 — nasazení: chybějící migrace a neviditelný odkaz
 
 Při nasazování vyplavaly dvě věci, obě starší než dnešek:
