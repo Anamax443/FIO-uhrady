@@ -38,6 +38,8 @@ import {
   ulozNastaveni,
   ulozOsobu,
   nactiBehy,
+  nactiZalohy,
+  ulozZalohu,
   zaplacenoOsobami,
 } from './db.js';
 import { renderDokumentace } from './docs-page.js';
@@ -311,19 +313,20 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/prehled') {
-          const [prehled, zaplaceno, nastaveni, beh, platby] = await Promise.all([
+          const [prehled, zaplaceno, nastaveni, beh, platby, zalohy] = await Promise.all([
             nactiPrehled(env.DB),
             zaplacenoOsobami(env.DB),
             nactiNastaveni(env.DB),
             posledniBeh(env.DB),
             nactiPlatby(env.DB, 500),
+            nactiZalohy(env.DB),
           ]);
           return html(
             renderPrehled(
               prehled,
               zaplaceno,
-              nastaveni.vyuctovani_od,
-              nastaveni.den_splatnosti,
+              zalohy,
+              nastaveni,
               beh,
               platby.filter((p) => p.member_id === null).length,
               kdo,
@@ -341,13 +344,14 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/vyrovnani') {
-          const [prehled, zaplaceno, nastaveni] = await Promise.all([
+          const [prehled, zaplaceno, nastaveni, zalohy] = await Promise.all([
             nactiPrehled(env.DB),
             zaplacenoOsobami(env.DB),
             nactiNastaveni(env.DB),
+            nactiZalohy(env.DB),
           ]);
           return html(
-            renderVyrovnani(prehled, zaplaceno, nastaveni.vyuctovani_od, nastaveni.den_splatnosti, kdo, env.GIT_COMMIT ?? 'dev'),
+            renderVyrovnani(prehled, zaplaceno, zalohy, nastaveni, kdo, env.GIT_COMMIT ?? 'dev'),
           );
         }
 
@@ -400,6 +404,23 @@ export default {
             kdo,
           );
           return json({ ok: true, id });
+        }
+
+        if (request.method === 'POST' && path === '/api/zaloha') {
+          const d = (await telo(request)) as { member_id?: number; castka?: string; plati_od?: string };
+          const korun = Number(String(d.castka ?? '').replace(/\s/g, '').replace(',', '.'));
+          if (!Number.isFinite(korun) || korun < 0) throw new ChybaVstupu('Záloha musí být číslo.');
+          await ulozZalohu(
+            env.DB,
+            {
+              member_id: Number(d.member_id),
+              castka: Math.round(korun * 100),
+              plati_od: String(d.plati_od ?? '').trim(),
+              poznamka: null,
+            },
+            kdo,
+          );
+          return json({ ok: true });
         }
 
         if (request.method === 'POST' && path === '/api/sledovani') {

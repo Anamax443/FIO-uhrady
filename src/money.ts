@@ -81,6 +81,30 @@ export function parseCastka(vstup: string): number | null {
   return Math.round(n * 100);
 }
 
+/* ---------- měsíce ---------- */
+
+/** Aktuální měsíc jako 'YYYY-MM'. */
+export const mesicNyni = (ted = new Date()): string =>
+  `${ted.getFullYear()}-${String(ted.getMonth() + 1).padStart(2, '0')}`;
+
+/** Pořadové číslo měsíce, aby se daly porovnávat a odčítat. */
+export function cisloMesice(mesic: string): number {
+  const shoda = mesic.match(/^(\d{4})-(\d{2})$/);
+  if (!shoda?.[1] || !shoda[2]) return 0;
+  return Number(shoda[1]) * 12 + (Number(shoda[2]) - 1);
+}
+
+/** 'YYYY-MM' posunutý o zadaný počet měsíců. */
+export function posunMesic(mesic: string, o: number): string {
+  const cislo = cisloMesice(mesic) + o;
+  return `${Math.floor(cislo / 12)}-${String((cislo % 12) + 1).padStart(2, '0')}`;
+}
+
+export const jeMesic = (v: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
+
+/** „Zaokrouhli nahoru na stovky" — u zálohy je malý přeplatek lepší než shánět nedoplatek. */
+export const nahoruNaStovky = (halere: number): number => Math.ceil(halere / 10000) * 10000;
+
 /** Procenta držíme v setinách procenta: 5000 = 50 %. */
 export const formatProcento = (setiny: number): string =>
   (setiny / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 2 });

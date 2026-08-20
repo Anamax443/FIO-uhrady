@@ -3,8 +3,8 @@
  * Log synchronizace a O aplikaci.
  */
 import { spocitej } from './admin-page.js';
-import type { Beh } from './db.js';
-import { formatKc, formatKcZnamenko } from './money.js';
+import { zalohaVMesici, type Beh, type Nastaveni, type Zaloha } from './db.js';
+import { formatKc, formatKcZnamenko, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
 import type { Osoba, Prehled } from './model.js';
 import { esc, shell } from './ui.js';
 
@@ -15,8 +15,14 @@ export interface RadekVyrovnani {
   /** měsíční podíl včetně těch, které osoba zastupuje (nezletilé dítě) */
   mesicne: number;
   jednorazove: number;
-  /** kolik měl dohromady přispět od začátku období */
-  predpis: number;
+  /** aktuální záloha na trvalý příkaz */
+  zaloha: number;
+  /** navržená záloha podle nákladů a rezervy */
+  navrh: number;
+  /** součet záloh za měsíce po splatnosti */
+  predepsano: number;
+  /** skutečný podíl na nákladech za tytéž měsíce */
+  skutecne: number;
   zaplaceno: number;
   /** kladné = zbývá doplatit, záporné = přeplatek */
   rozdil: number;
@@ -59,11 +65,13 @@ const datumCesky = (d: Date): string => d.toLocaleDateString('cs-CZ');
 export function vyrovnani(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
-  odMesice: string,
-  denSplatnosti = 20,
+  zalohy: Zaloha[],
+  nastaveni: Nastaveni,
+  ted = new Date(),
 ): { radky: RadekVyrovnani[]; mesicu: number } {
-  const s = spocitej(prehled);
-  const mesicu = pocetMesicu(odMesice, denSplatnosti);
+  const odMesice = nastaveni.vyuctovani_od;
+  const mesicu = pocetMesicu(odMesice, nastaveni.den_splatnosti, ted);
+  const tentoMesic = mesicNyni(ted);
 
   const sectiSDetmi = (o: Osoba, mapa: Map<number, number>): number => {
     let soucet = mapa.get(o.id) ?? 0;
@@ -71,20 +79,55 @@ export function vyrovnani(
     return soucet;
   };
 
+  // Skutečné náklady se sčítají měsíc po měsíci, ne průměrem — rozpouštěné
+  // položky v některých měsících běží a v jiných ne, takže průměr by lhal.
+  const skutecneZaOsobu = new Map<number, number>();
+  const predepsanoZaOsobu = new Map<number, number>();
+  for (let i = 0; i < mesicu; i++) {
+    const mesic = posunMesic(odMesice, i);
+    const souhrn = spocitej(prehled, mesic);
+    for (const o of prehled.osoby) {
+      const podil = sectiSDetmi(o, souhrn.mesicneOsoba) + sectiSDetmi(o, souhrn.saldoOsoba);
+      skutecneZaOsobu.set(o.id, (skutecneZaOsobu.get(o.id) ?? 0) + podil);
+      predepsanoZaOsobu.set(
+        o.id,
+        (predepsanoZaOsobu.get(o.id) ?? 0) + zalohaVMesici(zalohy, o.id, mesic),
+      );
+    }
+  }
+
+  // Návrh zálohy: co na osobu vyjde za příštích 12 měsíců, plus rezerva
+  // na neplánované nákupy, zaokrouhleno nahoru na stovky.
+  const odhadRoku = new Map<number, number>();
+  for (let i = 0; i < 12; i++) {
+    const souhrn = spocitej(prehled, posunMesic(tentoMesic, i));
+    for (const o of prehled.osoby) {
+      odhadRoku.set(o.id, (odhadRoku.get(o.id) ?? 0) + sectiSDetmi(o, souhrn.mesicneOsoba));
+    }
+  }
+
+  const tedSouhrn = spocitej(prehled, tentoMesic);
+
   const radky = prehled.osoby
     .filter((o) => (o.pod_member_id ?? null) === null)
     .map((osoba): RadekVyrovnani => {
-      const mesicne = sectiSDetmi(osoba, s.mesicneOsoba);
-      const jednorazove = sectiSDetmi(osoba, s.saldoOsoba);
-      const predpis = mesicne * mesicu + jednorazove;
+      const mesicne = sectiSDetmi(osoba, tedSouhrn.mesicneOsoba);
+      const jednorazove = sectiSDetmi(osoba, tedSouhrn.saldoOsoba);
+      const zaloha = zalohaVMesici(zalohy, osoba.id, tentoMesic);
+      const predepsano = predepsanoZaOsobu.get(osoba.id) ?? 0;
       const uhrazeno = zaplaceno.get(osoba.id) ?? 0;
+      const rocni = odhadRoku.get(osoba.id) ?? 0;
+
       return {
         osoba,
         mesicne,
         jednorazove,
-        predpis,
+        zaloha,
+        navrh: nahoruNaStovky(Math.round((rocni / 12) * (1 + nastaveni.rezerva_procent / 100))),
+        predepsano,
         zaplaceno: uhrazeno,
-        rozdil: predpis - uhrazeno,
+        rozdil: predepsano - uhrazeno,
+        skutecne: skutecneZaOsobu.get(osoba.id) ?? 0,
         sledovat: Boolean(osoba.je_platce),
         zastupuje: prehled.osoby
           .filter((d) => (d.pod_member_id ?? null) === osoba.id)
@@ -115,15 +158,16 @@ const STYL_PREHLED = `
 export function renderPrehled(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
-  odMesice: string,
-  denSplatnosti: number,
+  zalohy: Zaloha[],
+  nastaveni: Nastaveni,
   beh: Beh | null,
   nepriraze: number,
   kdo: string,
   commit: string,
 ): string {
   const s = spocitej(prehled);
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice, denSplatnosti);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni);
+  const odMesice = nastaveni.vyuctovani_od;
   // Dluh se sčítá jen u těch, od koho příspěvky na účet opravdu chodí.
   const dluzi = radky.filter((r) => r.sledovat).reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
@@ -136,7 +180,7 @@ export function renderPrehled(
     <td class="col-num" data-popis="Měsíčně">${formatKc(r.mesicne)}</td>
     ${
       r.sledovat
-        ? `<td class="col-num" data-popis="Přispět celkem">${formatKc(r.predpis)}</td>
+        ? `<td class="col-num" data-popis="Předepsáno">${formatKc(r.predepsano)}</td>
     <td class="col-num" data-popis="Zaplaceno">${formatKc(r.zaplaceno)}</td>
     <td class="col-num ${r.rozdil > 0 ? 's-warn' : r.rozdil < 0 ? 'minus' : ''}" data-popis="Rozdíl">${
       r.rozdil === 0 ? 'vyrovnáno' : formatKcZnamenko(r.rozdil)
@@ -169,7 +213,7 @@ export function renderPrehled(
       <div class="panehead"><svg class="icon icon-sm"><use href="#i-users"/></svg>Kdo kolik</div>
       <div class="gridwrap">
         <table>
-          <thead><tr><th>Osoba</th><th class="col-num">Měsíčně</th><th class="col-num">Přispět celkem</th><th class="col-num">Zaplaceno</th><th class="col-num">Rozdíl</th></tr></thead>
+          <thead><tr><th>Osoba</th><th class="col-num">Měsíčně</th><th class="col-num">Předepsáno</th><th class="col-num">Zaplaceno</th><th class="col-num">Rozdíl</th></tr></thead>
           <tbody>${radkyOsob}</tbody>
         </table>
       </div>
@@ -308,29 +352,35 @@ el('pridat').addEventListener('click', async () => {
 const STYL_VYROVNANI = `
 <style>
 .main { display: block; overflow-y: auto; }
-.telo { padding: 11px 12px 16px; display: flex; flex-direction: column; gap: 12px; max-width: 900px; }
+.telo { padding: 11px 12px 16px; display: flex; flex-direction: column; gap: 12px; max-width: 940px; }
 .vysvetleni { color: var(--text-dim); margin: 0; max-width: 76ch; }
 .osoba-blok { border: 1px solid var(--border); border-radius: 2px; }
-.osoba-blok .hlava { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 11px; background: var(--chrome-hi); border-bottom: 1px solid var(--border); }
+.osoba-blok .hlava { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 7px 11px; background: var(--chrome-hi); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .osoba-blok .hlava b { font-size: 13.5px; }
 .osoba-blok .vypocet { padding: 9px 11px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; font-variant-numeric: tabular-nums; }
 .osoba-blok .vypocet span:nth-child(even) { font-family: var(--mono); text-align: right; }
 .osoba-blok .vysledek { border-top: 1px solid var(--border-soft); margin-top: 5px; padding-top: 5px; font-weight: 600; }
+.osoba-blok .oddil { margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--border-soft); font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint); grid-column: 1 / -1; }
+.zaloha-radek { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+.zaloha-radek input { width: 100px; }
 .zbyva { color: var(--warn); }
 .preplatek { color: var(--ok); }
 .skupina { margin: 6px 0 0; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
-.obdobi { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.obdobi { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--text-dim); }
+.obdobi .btn { text-decoration: none; }
+@media (max-width: 560px) { .telo { padding: 10px 9px 14px; } }
 </style>`;
 
 export function renderVyrovnani(
   prehled: Prehled,
   zaplaceno: Map<number, number>,
-  odMesice: string,
-  denSplatnosti: number,
+  zalohy: Zaloha[],
+  nastaveni: Nastaveni,
   kdo: string,
   commit: string,
 ): string {
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, odMesice, denSplatnosti);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni);
+  const odMesice = nastaveni.vyuctovani_od;
 
   const blok = (r: RadekVyrovnani): string => {
     const stav = !r.sledovat
@@ -338,34 +388,53 @@ export function renderVyrovnani(
       : r.rozdil > 0
         ? `<span class="zbyva">zbývá doplatit ${formatKc(r.rozdil)}</span>`
         : r.rozdil < 0
-          ? `<span class="preplatek">přeplatek ${formatKc(-r.rozdil)}</span>`
+          ? `<span class="preplatek">předplaceno ${formatKc(-r.rozdil)}</span>`
           : '<span>vyrovnáno</span>';
 
     // U koho příspěvky nechodí přes účet, se ukáže jen jeho podíl na nákladech.
     // Dopočítávat mu dluh by vyrobilo číslo, které nic neznamená.
-    const vypocet = r.sledovat
-      ? `<span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
-        <span>× počet měsíců od ${esc(odMesice)}</span><span>${mesicu}</span>
-        <span>Jednorázové (nedoplatky − přeplatky)</span><span>${formatKcZnamenko(r.jednorazove)}</span>
-        <span class="vysledek">Měl${r.osoba.jmeno.endsWith('a') ? 'a' : ''} přispět</span><span class="vysledek">${formatKc(r.predpis)}</span>
-        <span>Přišlo na účet</span><span>${formatKc(r.zaplaceno)}</span>
-        <span class="vysledek">Rozdíl</span><span class="vysledek">${
-          r.rozdil === 0 ? 'vyrovnáno' : formatKcZnamenko(r.rozdil)
-        }</span>`
-      : `<span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
+    if (!r.sledovat) {
+      return `<section class="osoba-blok">
+      <div class="hlava"><b>${esc(r.osoba.jmeno)}${
+        r.zastupuje.length ? ` <span class="note">(nese i ${esc(r.zastupuje.join(', '))})</span>` : ''
+      }</b>${stav}</div>
+      <div class="vypocet">
+        <span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
         <span>Ročně</span><span>${formatKc(r.mesicne * 12)}</span>
-        ${
-          r.jednorazove !== 0
-            ? `<span>Jednorázové</span><span>${formatKcZnamenko(r.jednorazove)}</span>`
-            : ''
-        }`;
+        ${r.zaplaceno !== 0 ? `<span>Zaplatil${r.osoba.jmeno.endsWith('a') ? 'a' : ''} ze svého</span><span>${formatKc(r.zaplaceno)}</span>` : ''}
+      </div>
+    </section>`;
+    }
 
     return `<section class="osoba-blok">
       <div class="hlava">
         <b>${esc(r.osoba.jmeno)}${r.zastupuje.length ? ` <span class="note">(nese i ${esc(r.zastupuje.join(', '))})</span>` : ''}</b>
         ${stav}
       </div>
-      <div class="vypocet">${vypocet}</div>
+      <div class="vypocet">
+        <span>Záloha na trvalý příkaz</span><span>${r.zaloha === 0 ? 'nestanovena' : formatKc(r.zaloha) + ' / měs'}</span>
+        <span>Předepsáno za ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}</span><span>${formatKc(r.predepsano)}</span>
+        <span>Přišlo na účet (i placené ze svého)</span><span>${formatKc(r.zaplaceno)}</span>
+        <span class="vysledek">${r.rozdil >= 0 ? 'Zbývá doplatit' : 'Předplaceno'}</span><span class="vysledek">${formatKc(Math.abs(r.rozdil))}</span>
+
+        <span class="oddil">Jak to vychází proti skutečným nákladům</span>
+        <span>Skutečný podíl za ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}</span><span>${formatKc(r.skutecne)}</span>
+        <span>Rozdíl proti zaplacenému</span><span>${formatKcZnamenko(r.zaplaceno - r.skutecne)}</span>
+        <span class="note">${
+          r.zaplaceno - r.skutecne >= 0
+            ? 'přeplatek se vrátí ve vyúčtování — sníží příští zálohu'
+            : 'nedoplatek se ve vyúčtování rozpustí do příští zálohy'
+        }</span><span></span>
+      </div>
+      <div class="zaloha-radek">
+        <span class="note">Návrh zálohy podle nákladů (+ ${nastaveni.rezerva_procent} % rezerva):</span>
+        <b class="mono">${formatKc(r.navrh)}</b>
+        <input type="text" class="mono" data-castka="${r.osoba.id}" value="${(r.navrh / 100).toFixed(0)}" aria-label="Záloha ${esc(r.osoba.jmeno)}" />
+        <span class="note">Kč / měs od</span>
+        <input type="text" class="mono" data-od="${r.osoba.id}" value="${esc(mesicNyni())}" style="width:88px" aria-label="Platnost od" />
+        <button class="btn" type="button" data-uloz="${r.osoba.id}">Stanovit zálohu</button>
+        <span class="note" data-stav="${r.osoba.id}"></span>
+      </div>
     </section>`;
   };
 
@@ -383,31 +452,45 @@ export function renderVyrovnani(
     <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg>Příspěvky a vyrovnání</div>
     <div class="telo">
       <p class="vysvetleni">
-        Kolik měl kdo od začátku období dohromady přispět a kolik od něj skutečně přišlo na účet.
-        Počítá se z <b>aktuálního</b> rozdělení nákladů — když se náklady v čase měnily, starší měsíce
-        se počítají dnešními čísly. Přesnější výpočet podle historie přijde s uzávěrkami měsíců.
+        Příspěvek se platí <b>fixní zálohou</b> na trvalý příkaz — každý měsíc stejná částka.
+        Dluh se počítá ze zálohy, ne z kolísajících nákladů: co má kdo poslat, se během období nemění.
+        Skutečné náklady se sčítají vedle a srovnají se s nimi až při vyúčtování.
       </p>
       <p class="vysvetleni">
-        Do rozdělení nákladů se počítají <b>všichni evidovaní</b> — od toho je vidět, co dům stojí
-        a na koho co padá. Ale <b>zaplaceno versus zbývá</b> se sleduje jen u toho, od koho příspěvky
-        chodí na účet; nastavuje se to v <a href="/admin/nastaveni">Nastavení</a>. U ostatních by dluh
-        jen narůstal a nic by neznamenal, protože se skládají mimo účet.
+        Do rozdělení nákladů se počítají <b>všichni evidovaní</b>, ale zálohu a dluh sleduje appka
+        jen u toho, od koho příspěvky chodí na účet — nastavuje se to v
+        <a href="/admin/nastaveni">Nastavení</a>.
       </p>
       <div class="obdobi">
         <span>Sledováno od <b class="mono">${esc(odMesice)}</b></span>
-        <span>· splatnost <b>${denSplatnosti}.</b> dne v měsíci</span>
-        <span>· příští úhrada <b>${datumCesky(dalsiSplatnost(denSplatnosti))}</b></span>
+        <span>· splatnost <b>${nastaveni.den_splatnosti}.</b> dne</span>
+        <span>· příští úhrada <b>${datumCesky(dalsiSplatnost(nastaveni.den_splatnosti))}</b></span>
+        <span>· po splatnosti <b>${mesicu}</b></span>
         <a class="btn" href="/admin/nastaveni">Změnit v Nastavení</a>
       </div>
-      <p class="vysvetleni">
-        Měsíc se do dlužné částky započítá <b>až dnem splatnosti</b> — do té doby ještě není co dlužit.
-        Teď je po splatnosti ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}.
-      </p>
       ${bloky || '<p class="vysvetleni">Zatím tu není nikdo, komu by se dal spočítat podíl.</p>'}
     </div>
   </div>`;
 
-
+  const skript = `<script>
+document.querySelectorAll('[data-uloz]').forEach((tlacitko) => {
+  tlacitko.addEventListener('click', async () => {
+    const id = tlacitko.dataset.uloz;
+    const stav = document.querySelector('[data-stav="' + id + '"]');
+    stav.textContent = 'ukládám…';
+    const odpoved = await fetch('/api/zaloha', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        member_id: Number(id),
+        castka: document.querySelector('[data-castka="' + id + '"]').value.trim(),
+        plati_od: document.querySelector('[data-od="' + id + '"]').value.trim(),
+      }),
+    });
+    const data = await odpoved.json().catch(() => ({}));
+    if (odpoved.ok) location.reload(); else stav.textContent = data.chyba || 'Nepovedlo se uložit.';
+  });
+});
+</script>`;
 
   const celkem = sledovani.reduce((a, r) => a + Math.max(0, r.rozdil), 0);
 
@@ -417,7 +500,8 @@ export function renderVyrovnani(
     titulek: 'Příspěvky a vyrovnání',
     commit,
     obsah,
-    status: `<span>období od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    status: `<span>od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    skript,
   });
 }
 

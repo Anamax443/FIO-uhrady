@@ -51,6 +51,18 @@ export interface Polozka {
   hradi_member_id: number | null;
   poznamka: string | null;
   podily: Podil[];
+  /**
+   * Rozpouštění: nákup není spotřeba. Uhlí za 42 000 se protopí za rok, takže
+   * se do měsíčních nákladů dává po dvanáctinách od `rozpustit_od`.
+   * `rozpustit_mesicu` null = položka se nerozpouští.
+   */
+  rozpustit_od?: string | null;
+  rozpustit_mesicu?: number | null;
+  /**
+   * 'ucet' = zaplaceno ze společného účtu (z peněz ze záloh),
+   * 'osoba' = zaplatil to někdo ze svého a vzniká mu kredit.
+   */
+  zdroj_uhrady?: string;
 }
 
 export interface Prehled {

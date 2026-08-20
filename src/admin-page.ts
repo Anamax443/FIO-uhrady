@@ -3,6 +3,8 @@
  * editace vybrané položky vpravo. Kreslí se z databáze.
  */
 import {
+  cisloMesice,
+  mesicNyni,
   DRUHY,
   formatKc,
   formatKcZnamenko,
@@ -38,7 +40,23 @@ export interface Souhrn {
   nedokoncenych: number;
 }
 
-export function spocitej(prehled: Prehled): Souhrn {
+/**
+ * Běží rozpouštěná položka v daném měsíci?
+ *
+ * Uhlí koupené v říjnu na 12 měsíců se počítá od října do září a pak zmizí
+ * samo. Mimo své okno do nákladů nevstupuje vůbec.
+ */
+export function rozpousteneVMesici(p: Polozka, mesic: string): boolean {
+  const n = p.rozpustit_mesicu ?? 0;
+  if (n <= 0 || !p.rozpustit_od) return false;
+  const zacatek = cisloMesice(p.rozpustit_od);
+  const ted = cisloMesice(mesic);
+  return ted >= zacatek && ted < zacatek + n;
+}
+
+const seRozpousti = (p: Polozka): boolean => (p.rozpustit_mesicu ?? 0) > 0 && Boolean(p.rozpustit_od);
+
+export function spocitej(prehled: Prehled, mesic: string = mesicNyni()): Souhrn {
   const radky: Radek[] = [];
   const mesicneOsoba = new Map<number, number>();
   const saldoOsoba = new Map<number, number>();
@@ -48,23 +66,45 @@ export function spocitej(prehled: Prehled): Souhrn {
 
   for (const polozka of prehled.polozky) {
     const { naOsobu: podil, nerozdeleno } = rozpad(polozka.castka_celkem, polozka.podily);
-    const jednorazovy = jeJednorazovy(polozka.druh);
+    const rozpousti = seRozpousti(polozka);
+    const bezi = rozpousti && rozpousteneVMesici(polozka, mesic);
+    // Rozpouštěná položka se chová jako měsíční náklad po dobu svého okna;
+    // do jednorázového salda nespadne, jinak by se započítala dvakrát.
+    const jednorazovy = !rozpousti && jeJednorazovy(polozka.druh);
+    // Bez data se jednorázová položka počítá do aktuálního měsíce, ať
+    // z výpočtu nevypadne úplně.
+    const vMesici = polozka.datum ? polozka.datum.slice(0, 7) === mesic : mesic === mesicNyni();
     const zn = znamenko(polozka.druh);
+    const dil = rozpousti ? Math.round(polozka.castka_celkem / (polozka.rozpustit_mesicu ?? 1)) : 0;
     const naOsobu = new Map<number, number>();
 
     for (const [memberId, castka] of podil) {
-      // Pravidelné se rozpouští do měsíčního průměru, jednorázové jdou celé do salda.
-      const hodnota = jednorazovy ? zn * castka : mesicne(castka, polozka.perioda);
+      const hodnota = rozpousti
+        ? bezi
+          ? Math.round(castka / (polozka.rozpustit_mesicu ?? 1))
+          : 0
+        : jednorazovy
+          ? zn * castka
+          : mesicne(castka, polozka.perioda);
       naOsobu.set(memberId, hodnota);
-      const kam = jednorazovy ? saldoOsoba : mesicneOsoba;
-      kam.set(memberId, (kam.get(memberId) ?? 0) + hodnota);
+      // Jednorázová položka patří do měsíce svého data — jinak by se při
+      // součtu přes víc měsíců započítala tolikrát, kolik měsíců se sčítá.
+      if (hodnota !== 0 && (!jednorazovy || vMesici)) {
+        const kam = jednorazovy ? saldoOsoba : mesicneOsoba;
+        kam.set(memberId, (kam.get(memberId) ?? 0) + hodnota);
+      }
     }
 
-    const castka = jednorazovy
-      ? zn * polozka.castka_celkem
-      : mesicne(polozka.castka_celkem, polozka.perioda);
-    if (jednorazovy) saldoCelkem += castka;
-    else mesicneCelkem += castka;
+    const castka = rozpousti
+      ? bezi
+        ? dil
+        : 0
+      : jednorazovy
+        ? zn * polozka.castka_celkem
+        : mesicne(polozka.castka_celkem, polozka.perioda);
+    if (jednorazovy) {
+      if (vMesici) saldoCelkem += castka;
+    } else mesicneCelkem += castka;
 
     // Nula je platná částka, ne chybějící údaj — nedokončené je jen to,
     // co se nerozdělilo celé.
@@ -276,6 +316,23 @@ function detail(prehled: Prehled): string {
       <div class="frow"><label for="d-kategorie">Kategorie</label><input type="text" id="d-kategorie" /></div>
       <div class="frow"><label for="d-hradi">Fakturu platí</label><select id="d-hradi"><option value="">—</option>${osoby}</select></div>
     </div>
+    <div class="frow2">
+      <div class="frow"><label for="d-zdroj">Zaplaceno z</label>
+        <select id="d-zdroj">
+          <option value="ucet">účtu domácnosti</option>
+          <option value="osoba">vlastní kapsy (vzniká kredit)</option>
+        </select>
+      </div>
+      <div class="frow"><label for="d-rozpustit">Rozpustit přes</label>
+        <input type="text" id="d-rozpustit" inputmode="numeric" placeholder="počet měsíců" />
+      </div>
+    </div>
+    <div class="frow2" id="w-rozpustit-od">
+      <div class="frow"><label for="d-rozpustit-od">Rozpouštět od</label>
+        <input type="text" id="d-rozpustit-od" class="mono" placeholder="RRRR-MM" />
+      </div>
+      <div class="frow"><label>&nbsp;</label><span class="note" id="d-rozpad-info"></span></div>
+    </div>
     <div class="frow"><label for="d-poznamka">Poznámka</label><textarea id="d-poznamka"></textarea></div>
 
     <div class="subhead">Kdo se skládá
@@ -343,6 +400,9 @@ export function renderNaklady(
       datum: p.datum ?? '',
       hradi: p.hradi_member_id,
       poznamka: p.poznamka ?? '',
+      rozpustit_od: p.rozpustit_od ?? '',
+      rozpustit_mesicu: p.rozpustit_mesicu ?? '',
+      zdroj: p.zdroj_uhrady ?? 'ucet',
       podily: p.podily,
     })),
   }).replace(/</g, '\\u003c');
@@ -423,11 +483,22 @@ function prepocitej() {
   box.querySelector('b').textContent = kcZn(zbytek);
   box.classList.toggle('warn', Math.round(zbytek / 100) !== 0);
 
+  // Rozpouštěná položka se chová jako měsíční náklad po dobu svého okna,
+  // proto se počítá jinak než jednorázová i než pravidelná.
+  const rozpustitN = parseInt(el('d-rozpustit').value.trim(), 10);
+  const rozpousti = Number.isInteger(rozpustitN) && rozpustitN > 0;
+  el('w-rozpustit-od').style.display = rozpousti ? '' : 'none';
+  el('d-rozpad-info').textContent = rozpousti
+    ? kc(Math.round(celkem / rozpustitN)) + ' měsíčně po ' + rozpustitN + ' měsíců'
+    : '';
+
   const zn = druh === 'preplatek' ? -1 : 1;
   const del = DELITEL[el('d-perioda').value] || 0;
-  el('d-dopad').innerHTML = jedno
-    ? '<span>Promítne se do vyrovnání</span><b>' + kcZn(zn * celkem) + '</b>'
-    : '<span>Měsíčně z toho</span><b>' + kc(del ? Math.round(celkem / del) : 0) + '</b>';
+  el('d-dopad').innerHTML = rozpousti
+    ? '<span>Rozpouští se měsíčně</span><b>' + kc(Math.round(celkem / rozpustitN)) + '</b>'
+    : jedno
+      ? '<span>Promítne se do vyrovnání</span><b>' + kcZn(zn * celkem) + '</b>'
+      : '<span>Měsíčně z toho</span><b>' + kc(del ? Math.round(celkem / del) : 0) + '</b>';
 
   return { celkem: celkem, podily: podily };
 }
@@ -436,6 +507,7 @@ function ukazPolozku(id) {
   const p = MODEL.polozky.find((x) => x.id === id) || {
     id: null, nazev: '', kategorie: '', castka: 0, perioda: 'mesicne',
     druh: 'pravidelny', datum: '', hradi: null, poznamka: '', podily: [],
+    rozpustit_od: '', rozpustit_mesicu: '', zdroj: 'ucet',
   };
   vybraneId = p.id;
   el('d-titulek').textContent = p.id === null ? 'Nová položka' : p.nazev;
@@ -447,6 +519,9 @@ function ukazPolozku(id) {
   el('d-kategorie').value = p.kategorie;
   el('d-hradi').value = p.hradi === null ? '' : String(p.hradi);
   el('d-poznamka').value = p.poznamka;
+  el('d-zdroj').value = p.zdroj || 'ucet';
+  el('d-rozpustit').value = p.rozpustit_mesicu === '' ? '' : String(p.rozpustit_mesicu);
+  el('d-rozpustit-od').value = p.rozpustit_od || '';
   for (const o of MODEL.osoby) {
     const podil = p.podily.find((x) => x.member_id === o.id);
     q('[data-zapojen="' + o.id + '"]').checked = Boolean(podil);
@@ -518,6 +593,9 @@ el('d-ulozit').addEventListener('click', () => {
     datum: jednorazovy(druh) ? el('d-datum').value : null,
     hradi_member_id: el('d-hradi').value || null,
     poznamka: el('d-poznamka').value,
+    zdroj_uhrady: el('d-zdroj').value,
+    rozpustit_mesicu: el('d-rozpustit').value.trim(),
+    rozpustit_od: el('d-rozpustit-od').value.trim(),
     podily: stav.podily,
   });
 });

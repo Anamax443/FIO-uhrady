@@ -142,21 +142,67 @@ const KAPITOLY: Kapitola[] = [
       </p>`,
   },
   {
-    id: 'vyrovnani',
-    nadpis: 'Příspěvky a vyrovnání',
+    id: 'rozpousteni',
+    nadpis: 'Nákup není spotřeba',
     telo: `
-      <p>Kolik měl kdo dohromady zaplatit se počítá takto:</p>
       <p>
-        <code>měsíční podíl × počet měsíců od začátku období + jednorázové položky − co přišlo na účet</code>
+        Uhlí za 42 000 Kč se protopí za celou sezónu, ne v měsíci nákupu. Kdyby appka
+        hodila celou částku do jednoho měsíce, vyskočil by tenhle měsíc příspěvek do nesmyslné
+        výše a příští měsíc by zase spadl.
       </p>
       <p>
-        Kladný výsledek znamená <b>zbývá doplatit</b>, záporný <b>přeplatek</b>. Začátek období
-        se nastavuje přímo na té stránce.
+        Proto se u položky dá zadat <b>rozpuštění</b>: přes kolik měsíců a od kterého.
+        42 000 Kč na 12 měsíců = 3 500 Kč měsíčně, které se dělí mezi lidi jako každý
+        jiný náklad. Po dvanácti měsících položka z měsíčních nákladů zmizí sama.
+      </p>
+      <p>
+        Další dokoupení je <b>samostatná položka</b> se svým rozpuštěním — klidně běží
+        souběžně s tou první.
+      </p>
+      <h3>Kdo to zaplatil</h3>
+      <p>
+        U položky se určuje, jestli se platila <b>ze společného účtu</b>, nebo
+        <b>z něčí kapsy</b>. Když děda koupí uhlí za své, vloží do domácnosti reálné peníze —
+        appka mu je připíše stejně jako platbu příkazem a jeho kredit se umořuje tím,
+        jak se náklad rozpouští.
+      </p>
+      <div class="poznamka">
+        Rozlišení zdroje je důležité kvůli dvojímu počítání: bez něj by se náklad
+        objevil dvakrát — jednou jako výdaj a podruhé jako něčí vklad.
+      </div>`,
+  },
+  {
+    id: 'vyrovnani',
+    nadpis: 'Zálohy a vyrovnání',
+    telo: `
+      <p>
+        Příspěvek se platí <b>fixní zálohou</b> — trvalým příkazem, každý měsíc stejná částka.
+        Dluh se počítá <b>ze zálohy</b>, ne z kolísajících nákladů: co má kdo poslat,
+        se během období nemění.
+      </p>
+      <p>
+        <code>dluh = záloha × počet měsíců po splatnosti − co přišlo</code>
+      </p>
+      <p>
+        Měsíc se započítá až <b>dnem splatnosti</b> (nastavuje se, výchozí 20.). Do té doby
+        ještě není co dlužit.
+      </p>
+      <h3>Jak vzniká záloha</h3>
+      <p>
+        Aplikace spočítá, kolik na osobu vyjde za příštích dvanáct měsíců, přidá
+        <b>rezervu na neplánované nákupy</b> a zaokrouhlí nahoru na stovky. Návrh pak
+        <b>potvrdí admin</b> — appka zálohu nikdy nestanoví sama. Zaokrouhluje se nahoru
+        schválně: malý přeplatek se vrací líp, než se shání nedoplatek.
+      </p>
+      <h3>Vyúčtování</h3>
+      <p>
+        Vedle záloh se sčítají <b>skutečné náklady</b>. Rozdíl mezi zaplaceným a skutečností
+        je přeplatek nebo nedoplatek — ten se při vyúčtování <b>rozpustí do nové zálohy</b>,
+        takže trvalý příkaz se přepíše jednou za období a zase je klid.
       </p>
       <div class="varovani">
-        Starší měsíce se zatím počítají <b>dnešními</b> částkami. Když se náklad v čase změnil,
-        výpočet to nezohlední — na to budou potřeba měsíční uzávěrky, které zamrazí, co v daném
-        měsíci platilo. Do té doby ber vyrovnání jako orientační, ne jako účetní doklad.
+        Starší měsíce se zatím počítají <b>dnešními</b> částkami. Přesnější výpočet podle
+        historie přijde s měsíčními uzávěrkami, které zamrazí, co v daném měsíci platilo.
       </div>`,
   },
   {
@@ -165,7 +211,8 @@ const KAPITOLY: Kapitola[] = [
     telo: `
       <p>
         V Nastavení se určuje, <b>kdo posílá peníze na účet</b> a podle čeho ho poznat (VS,
-        případně číslo účtu), a vkládá se <b>token do Fio</b>.
+        případně číslo účtu), <b>od kdy se příspěvky sledují</b>, <b>kolikátého jsou splatné</b>
+        a vkládá se <b>token do Fio</b>.
       </p>
       <h3>Token</h3>
       <p>

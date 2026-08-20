@@ -17,6 +17,10 @@ export interface Nastaveni {
   vyuctovani_od: string;
   /** kolikátého v měsíci je příspěvek splatný */
   den_splatnosti: number;
+  /** rezerva v záloze na neplánované nákupy, v procentech */
+  rezerva_procent: number;
+  /** nedoplatek do téhle výše se rozpustí do zálohy, nad ni se appka zeptá (haléře) */
+  prah_doplatku: number;
 }
 
 interface ReadekPolozky {
@@ -29,6 +33,9 @@ interface ReadekPolozky {
   datum: string | null;
   hradi_member_id: number | null;
   poznamka: string | null;
+  rozpustit_od: string | null;
+  rozpustit_mesicu: number | null;
+  zdroj_uhrady: string;
 }
 
 interface RadekPodilu {
@@ -108,14 +115,107 @@ export async function ulozOsobu(
   return vstup.id;
 }
 
-/** Kolik od koho přišlo na účet. Klíč = member_id. */
+/**
+ * Kolik kdo do domácnosti vložil. Klíč = member_id.
+ *
+ * Nejsou to jen příchozí platby na účet — započítá se i to, co někdo zaplatil
+ * **ze svého** (položky se `zdroj_uhrady = 'osoba'`). Děda, který koupil uhlí
+ * za 42 000 z vlastní kapsy, vložil do domácnosti stejně reálné peníze jako
+ * ten, kdo pošle příkazem.
+ */
 export async function zaplacenoOsobami(db: D1Database): Promise<Map<number, number>> {
+  const [zBanky, zKapsy] = await Promise.all([
+    db
+      .prepare(
+        'select member_id, sum(castka) as soucet from payments where member_id is not null and castka > 0 group by member_id',
+      )
+      .all<{ member_id: number; soucet: number }>(),
+    db
+      .prepare(
+        `select hradi_member_id as member_id, sum(castka_celkem) as soucet from cost_items
+          where aktivni = 1 and zdroj_uhrady = 'osoba' and hradi_member_id is not null
+          group by hradi_member_id`,
+      )
+      .all<{ member_id: number; soucet: number }>(),
+  ]);
+
+  const soucty = new Map<number, number>();
+  for (const r of [...zBanky.results, ...zKapsy.results]) {
+    soucty.set(r.member_id, (soucty.get(r.member_id) ?? 0) + r.soucet);
+  }
+  return soucty;
+}
+
+export interface Zaloha {
+  id: number;
+  member_id: number;
+  castka: number;
+  plati_od: string;
+  poznamka: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export async function nactiZalohy(db: D1Database): Promise<Zaloha[]> {
   const { results } = await db
     .prepare(
-      'select member_id, sum(castka) as soucet from payments where member_id is not null and castka > 0 group by member_id',
+      `select id, member_id, castka, plati_od, poznamka, created_at, created_by
+         from zalohy order by plati_od desc, member_id`,
     )
-    .all<{ member_id: number; soucet: number }>();
-  return new Map(results.map((r) => [r.member_id, r.soucet]));
+    .all<Zaloha>();
+  return results;
+}
+
+/**
+ * Záloha platná v daném měsíci = poslední, která začala nejpozději tehdy.
+ * Historie se nepřepisuje, takže zpětný výpočet dluhu sedí na to,
+ * co se v tom měsíci opravdu platilo.
+ */
+export function zalohaVMesici(zalohy: Zaloha[], member_id: number, mesic: string): number {
+  const platne = zalohy
+    .filter((z) => z.member_id === member_id && z.plati_od <= mesic)
+    .sort((a, b) => (a.plati_od < b.plati_od ? 1 : -1));
+  return platne[0]?.castka ?? 0;
+}
+
+export async function ulozZalohu(
+  db: D1Database,
+  vstup: { member_id: number; castka: number; plati_od: string; poznamka: string | null },
+  kdo: string,
+): Promise<void> {
+  if (!Number.isInteger(vstup.castka) || vstup.castka < 0) {
+    throw new ChybaVstupu('Záloha musí být nezáporné číslo.');
+  }
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(vstup.plati_od)) {
+    throw new ChybaVstupu('Platnost zálohy čekám ve tvaru RRRR-MM.');
+  }
+  const osoba = await db
+    .prepare('select jmeno from members where id = ?')
+    .bind(vstup.member_id)
+    .first<{ jmeno: string }>();
+  if (osoba === null) throw new ChybaVstupu('Osoba neexistuje.');
+
+  await db.batch([
+    db
+      .prepare(
+        `insert into zalohy (member_id, castka, plati_od, poznamka, created_by)
+         values (?, ?, ?, ?, ?)
+         on conflict(member_id, plati_od) do update set castka = excluded.castka,
+              poznamka = excluded.poznamka, created_by = excluded.created_by,
+              created_at = datetime('now')`,
+      )
+      .bind(vstup.member_id, vstup.castka, vstup.plati_od, vstup.poznamka, kdo),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'zaloha',
+      String(vstup.member_id),
+      `Záloha ${osoba.jmeno}: ${(vstup.castka / 100).toLocaleString('cs-CZ')} Kč měsíčně od ${vstup.plati_od}`,
+      null,
+      vstup,
+    ),
+  ]);
 }
 
 export async function nactiBehy(db: D1Database, limit = 50): Promise<Beh[]> {
@@ -133,7 +233,8 @@ export async function nactiPrehled(db: D1Database): Promise<Prehled> {
     nactiOsoby(db),
     db
       .prepare(
-        `select id, nazev, kategorie, castka_celkem, perioda, druh, datum, hradi_member_id, poznamka
+        `select id, nazev, kategorie, castka_celkem, perioda, druh, datum, hradi_member_id, poznamka,
+                  rozpustit_od, rozpustit_mesicu, zdroj_uhrady
            from cost_items where aktivni = 1
           order by case druh when 'pravidelny' then 0 else 1 end, kategorie, id`,
       )
@@ -169,6 +270,9 @@ export async function nactiPrehled(db: D1Database): Promise<Prehled> {
         datum: r.datum,
         hradi_member_id: r.hradi_member_id,
         poznamka: r.poznamka,
+        rozpustit_od: r.rozpustit_od,
+        rozpustit_mesicu: r.rozpustit_mesicu,
+        zdroj_uhrady: r.zdroj_uhrady,
         podily: podleId.get(r.id) ?? [],
       }),
     ),
@@ -187,6 +291,8 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     fio_token_naznak: token ? naznak(token) : null,
     sync_window_days: Number(mapa.get('sync_window_days') ?? '14'),
     vyuctovani_od: mapa.get('vyuctovani_od') ?? new Date().toISOString().slice(0, 7),
+    rezerva_procent: Number(mapa.get('rezerva_procent') ?? '10'),
+    prah_doplatku: Number(mapa.get('prah_doplatku') ?? '500000'),
     den_splatnosti: Number(mapa.get('den_splatnosti') ?? '20'),
   };
 }
@@ -399,6 +505,9 @@ export interface VstupPolozky {
   datum: string | null;
   hradi_member_id: number | null;
   poznamka: string | null;
+  rozpustit_od: string | null;
+  rozpustit_mesicu: number | null;
+  zdroj_uhrady: string;
   podily: Podil[];
 }
 
@@ -441,6 +550,24 @@ export function overPolozku(data: unknown): VstupPolozky {
     return { member_id, rezim, hodnota };
   });
 
+  const rozpustitMesicu =
+    d['rozpustit_mesicu'] === null || d['rozpustit_mesicu'] === undefined || d['rozpustit_mesicu'] === ''
+      ? null
+      : Number(d['rozpustit_mesicu']);
+  if (rozpustitMesicu !== null && (!Number.isInteger(rozpustitMesicu) || rozpustitMesicu < 1 || rozpustitMesicu > 120)) {
+    throw new ChybaVstupu('Rozpustit lze na 1 až 120 měsíců.');
+  }
+  const rozpustitOd = d['rozpustit_od'] ? String(d['rozpustit_od']) : null;
+  if (rozpustitMesicu !== null && (rozpustitOd === null || !/^\d{4}-(0[1-9]|1[0-2])$/.test(rozpustitOd))) {
+    throw new ChybaVstupu('U rozpouštěné položky vyplň, od kterého měsíce se rozpouští (RRRR-MM).');
+  }
+  const zdroj = String(d['zdroj_uhrady'] ?? 'ucet');
+  if (zdroj !== 'ucet' && zdroj !== 'osoba') throw new ChybaVstupu('Neznámý zdroj úhrady.');
+  const hradi = d['hradi_member_id'] ? Number(d['hradi_member_id']) : null;
+  if (zdroj === 'osoba' && hradi === null) {
+    throw new ChybaVstupu('Když to někdo platil ze svého, vyber u „Fakturu platí“ koho — jinak nejde komu připsat kredit.');
+  }
+
   const id = d['id'] === null || d['id'] === undefined ? null : Number(d['id']);
   if (id !== null && !Number.isInteger(id)) throw new ChybaVstupu('Neplatné id položky.');
 
@@ -452,8 +579,11 @@ export function overPolozku(data: unknown): VstupPolozky {
     perioda,
     druh,
     datum,
-    hradi_member_id: d['hradi_member_id'] ? Number(d['hradi_member_id']) : null,
+    hradi_member_id: hradi,
     poznamka: d['poznamka'] ? String(d['poznamka']).trim() || null : null,
+    rozpustit_od: rozpustitMesicu === null ? null : rozpustitOd,
+    rozpustit_mesicu: rozpustitMesicu,
+    zdroj_uhrady: zdroj,
     podily,
   };
 }
@@ -494,7 +624,10 @@ function stejnaPolozka(pred: Record<string, unknown>, vstup: VstupPolozky): bool
     shodne(pred['druh'], vstup.druh) &&
     shodne(pred['datum'], vstup.datum) &&
     shodne(pred['hradi_member_id'], vstup.hradi_member_id) &&
-    shodne(pred['poznamka'], vstup.poznamka);
+    shodne(pred['poznamka'], vstup.poznamka) &&
+    shodne(pred['rozpustit_od'], vstup.rozpustit_od) &&
+    shodne(pred['rozpustit_mesicu'], vstup.rozpustit_mesicu) &&
+    shodne(pred['zdroj_uhrady'], vstup.zdroj_uhrady);
   if (!poli) return false;
 
   const klic = (p: Podil[]): string =>
@@ -537,8 +670,9 @@ export async function ulozPolozku(
   if (id === null) {
     const vlozeno = await db
       .prepare(
-        `insert into cost_items (nazev, kategorie, castka_celkem, perioda, druh, datum, hradi_member_id, poznamka)
-         values (?, ?, ?, ?, ?, ?, ?, ?) returning id`,
+        `insert into cost_items (nazev, kategorie, castka_celkem, perioda, druh, datum, hradi_member_id, poznamka,
+                                 rozpustit_od, rozpustit_mesicu, zdroj_uhrady)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) returning id`,
       )
       .bind(
         vstup.nazev,
@@ -549,6 +683,9 @@ export async function ulozPolozku(
         vstup.datum,
         vstup.hradi_member_id,
         vstup.poznamka,
+        vstup.rozpustit_od,
+        vstup.rozpustit_mesicu,
+        vstup.zdroj_uhrady,
       )
       .first<{ id: number }>();
     if (!vlozeno) throw new Error('Položku se nepodařilo založit.');
@@ -562,7 +699,8 @@ export async function ulozPolozku(
       .prepare(
         `update cost_items
             set nazev = ?, kategorie = ?, castka_celkem = ?, perioda = ?, druh = ?, datum = ?,
-                hradi_member_id = ?, poznamka = ?, updated_at = datetime('now')
+                hradi_member_id = ?, poznamka = ?, rozpustit_od = ?, rozpustit_mesicu = ?,
+                zdroj_uhrady = ?, updated_at = datetime('now')
           where id = ?`,
       )
       .bind(
@@ -574,6 +712,9 @@ export async function ulozPolozku(
         vstup.datum,
         vstup.hradi_member_id,
         vstup.poznamka,
+        vstup.rozpustit_od,
+        vstup.rozpustit_mesicu,
+        vstup.zdroj_uhrady,
         id,
       )
       .run();
