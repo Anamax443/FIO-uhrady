@@ -2,6 +2,26 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — nasazení: chybějící migrace a neviditelný odkaz
+
+Při nasazování vyplavaly dvě věci, obě starší než dnešek:
+
+**`d1 execute --remote --file` neprojde** — Cloudflare vrací `Authentication error
+[code: 10000]`, protože `--file` jde přes *import* endpoint a ten OAuth token
+wranglera odmítá. **Funguje `--command`.** Kvůli tomu nikdy neproběhla ani
+migrace **0008** (`members.view_token`), takže „Vytvořit odkaz" v ostré databázi
+padalo od začátku. Doplněno po jednotlivých příkazech; schéma je teď kompletní
+(0001–0009 ověřeno proti `sqlite_master` a `pragma_table_info`).
+
+**`nactiOsoby` nevybíralo `view_token`**, takže Nastavení nepoznalo, že osoba
+odkaz už má: klik odkaz vytvořil, stránka se načetla a vypadala stejně —
+zvenčí to působilo, že tlačítko nereaguje. Opraveno; ověřeno lokálně, že se
+vytvoření i zrušení hned projeví.
+
+**Poznámka pro příště:** hláška *„Uložení se nepovedlo, zkus to prosím znovu"*
+schovala chybu schématu a poslala hledat úplně jinam. Přihlášenému adminovi
+by měla ukázat skutečnou příčinu (`no such column: view_token`). Neopraveno.
+
 ## 2026-08-20 — vyúčtování období (bod 4 z dohodnutého pořadí)
 
 Kruh se uzavřel: záloha × skutečnost se teď dá **srovnat a rozdíl rozpustit

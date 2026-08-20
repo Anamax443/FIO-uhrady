@@ -51,7 +51,9 @@ interface RadekPodilu {
 export async function nactiOsoby(db: D1Database, iNeaktivni = false): Promise<Osoba[]> {
   const { results } = await db
     .prepare(
-      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni
+      // `view_token` musí být v seznamu: bez něj Nastavení nepozná, že osoba
+      // odkaz už má, a nabízelo by „Vytvořit odkaz" i po jeho vytvoření.
+      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token
          from members ${iNeaktivni ? '' : 'where aktivni = 1'} order by aktivni desc, id`,
     )
     .all<Osoba>();
