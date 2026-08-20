@@ -280,11 +280,21 @@ const KAPITOLY: Kapitola[] = [
       <ul>
         <li><b>kolik zbývá doplatit</b> nebo kolik má předplaceno, velkým písmem hned nahoře;</li>
         <li><b>QR platbu</b> na tu částku — naskenuje se v mobilní bance, částka i variabilní
-            symbol se vyplní samy, takže nevznikne překlep;</li>
+            symbol se vyplní samy, takže nevznikne překlep. <b>Název příjemce a zprávu</b>
+            si píšeš v Nastavení; co nevyplníš, se do kódu nedá vůbec a banka nabídne
+            své předvyplnění. Obojí nejvýš 35 znaků a bez diakritiky — to je omezení
+            QR platby, háčky appka sama odstraní;</li>
         <li>výši své zálohy a datum nejbližší splatnosti;</li>
         <li><b>graf</b> svého podílu po měsících a seznam svých plateb;</li>
         <li><b>náklady domu na rok</b> po kategoriích a položkách.</li>
       </ul>
+      <h3>Texty si píšeš sám</h3>
+      <p>
+        Věty, které člen na přehledu čte („přišlo míň, než mělo", „ještě není splatné"),
+        <b>nejsou v kódu</b> — přepíšeš si je v Nastavení. Aplikace jen vybere, která věta
+        se na daný měsíc hodí; jak zní, je na tobě. Prázdné pole vrátí výchozí znění,
+        které je pod ním vypsané.
+      </p>
       <div class="poznamka">
         Ze svého přehledu se <b>nedozví nic o ostatních</b> — kolik platí kdo jiný tam není.
         Souhrn za dům je bez rozpadu na osoby.

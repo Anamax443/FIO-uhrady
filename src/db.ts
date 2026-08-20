@@ -8,6 +8,7 @@
 import { vlozenoZeSveho } from './admin-page.js';
 import { jeDruh, jePerioda, mesicNyni, posunMesic, type Podil, type Rezim } from './money.js';
 import type { Osoba, Polozka, Prehled } from './model.js';
+import { slozTexty } from './texty.js';
 
 export interface Nastaveni {
   nazev_domu: string;
@@ -28,6 +29,12 @@ export interface Nastaveni {
   auto_vyuctovani: boolean;
   /** délka vyúčtovacího období v měsících */
   vyuctovani_mesicu: number;
+  /** název příjemce v QR platbě — co uvidí člověk v bance; prázdné = nedávat */
+  qr_prijemce: string;
+  /** zpráva pro příjemce v QR platbě; prázdné = nedávat */
+  qr_zprava: string;
+  /** věty na osobním přehledu, které si správce píše sám (viz texty.ts) */
+  texty: Record<string, string>;
 }
 
 interface ReadekPolozky {
@@ -697,6 +704,11 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     auto_uzaverka: (mapa.get('auto_uzaverka') ?? '1') === '1',
     auto_vyuctovani: (mapa.get('auto_vyuctovani') ?? '1') === '1',
     vyuctovani_mesicu: Math.max(1, Number(mapa.get('vyuctovani_mesicu') ?? '12')),
+    // Texty do QR si píše správce. Prázdné znamená „nedávat do QR vůbec",
+    // ne „doplnit něco za něj".
+    qr_prijemce: mapa.get('qr_prijemce') ?? '',
+    qr_zprava: mapa.get('qr_zprava') ?? '',
+    texty: slozTexty(mapa),
   };
 }
 

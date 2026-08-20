@@ -2,6 +2,29 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — texty patří do Nastavení, ne do kódu
+
+Uživatel to řekl natvrdo: **co se může měnit, si píše sám.** Aplikace skládala
+věty v kódu, včetně odhadu rodu z toho, jestli jméno končí na „a" (u Nikoly
+nebo Saši nesmysl).
+
+- **`src/texty.ts`** — věty na osobním přehledu („přišlo míň, než mělo",
+  „ještě není splatné", text pod QR…) mají v kódu jen **výchozí znění**;
+  cokoli vyplněného v Nastavení má přednost, prázdné pole vrátí výchozí.
+- **QR platba**: název příjemce (`RN`) a zpráva (`MSG`) se berou z Nastavení.
+  Prázdné = do kódu se nedají vůbec a banka nabídne své předvyplnění. Ukládají
+  se už **profiltrované** (`proQr`: bez diakritiky, max 35 znaků), takže
+  v Nastavení je vidět přesně to, co banka uvidí — omezení je dané standardem.
+- **Rod** je volitelný údaj u osoby; nevyplněný = appka mluví neutrálně.
+
+Ověřeno lokálně: změna textu se hned projeví na `/v/…`; QR se s příjemcem
+a zprávou liší od QR bez nich (délka cesty 13 760 × 9 270 × 11 380), takže
+ty údaje do kódu opravdu jdou.
+
+**Past, na kterou jsem dnes narazil dvakrát:** `osobaPodleTokenu` má vlastní
+seznam sloupců. Když se do něj nový sloupec nedoplní, osobní přehled o něm
+neví a tváří se, že je prázdný — přesně tak se ztratil `view_token` i `rod`.
+
 ## 2026-08-20 — bezobslužný provoz a kategorie v nákladech
 
 **Uzávěrky a vyúčtování se dělají samy** (`src/automat.ts`, běží z cronu vedle

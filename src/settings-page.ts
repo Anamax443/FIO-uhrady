@@ -7,6 +7,7 @@
  */
 import type { Nastaveni } from './db.js';
 import type { Osoba } from './model.js';
+import { TEXTY } from './texty.js';
 import { esc, shell } from './ui.js';
 
 interface ZaznamAuditu {
@@ -34,6 +35,9 @@ const STYL = `
 .platce { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
 .odkaz { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 0 6px; }
 .odkaz input { flex: 1; min-width: 220px; }
+.texty { display: grid; grid-template-columns: 210px minmax(220px, 1fr) minmax(0, 1.1fr); gap: 6px 10px; align-items: center; }
+.texty label { color: var(--text-dim); }
+.texty input { width: 100%; }
 .tokenradek { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tokenradek input { width: 320px; max-width: 100%; }
 .audit td { font-size: 11.5px; }
@@ -41,6 +45,8 @@ const STYL = `
 .audit .kdo { width: 190px; color: var(--text-dim); }
 .audit .akce { width: 92px; }
 @media (max-width: 820px) {
+  .texty { grid-template-columns: 1fr; gap: 2px; }
+  .texty label { margin-top: 8px; }
   .hlavicky { display: none; }
   .radek { grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }
   .radek .jmeno, .radek .stav { grid-column: 1 / -1; }
@@ -150,6 +156,7 @@ export function renderNastaveni(
     'odkaz-zrusen': 'Osobní odkaz zrušen — starý odkaz od teď nikam nevede.',
     sledovani: 'Sledování příspěvků uloženo.',
     token: 'Token do Fio uložen. Další stažení pohybů ho použije.',
+    texty: 'Texty uloženy. QR i osobní přehled je od teď používají.',
   };
   const hlaska = stav === null ? null : (HLASKY[stav] ?? null);
 
@@ -213,6 +220,49 @@ export function renderNastaveni(
           <button class="btn primary" type="button" id="ulozit-sledovani">Uložit</button>
           <span class="note" id="sledovani-stav"></span>
         </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg>QR platba a texty pro členy</div>
+      <div class="telo">
+        <p class="vysvetleni">
+          Co má být v <b>QR platbě</b> a jakými slovy appka mluví na osobním přehledu.
+          Nic z toho není zadrátované v kódu — píšeš si to sám. Prázdné pole u QR znamená,
+          že se ten údaj do kódu <b>nedá vůbec</b> a banka nabídne své vlastní předvyplnění.
+        </p>
+        <div class="texty">
+          <label for="qr-prijemce">Název příjemce v QR</label>
+          <input type="text" id="qr-prijemce" maxlength="35" value="${esc(nastaveni.qr_prijemce)}"
+                 placeholder="např. Jana Nováková" />
+          <span class="note">tohle uvidí člověk v bance jako příjemce platby</span>
+
+          <label for="qr-zprava">Zpráva pro příjemce v QR</label>
+          <input type="text" id="qr-zprava" maxlength="35" value="${esc(nastaveni.qr_zprava)}"
+                 placeholder="např. Prispevek na dum" />
+          <span class="note">objeví se u platby na výpisu</span>
+        </div>
+        <p class="vysvetleni note">
+          Obojí nejvýš <b>35 znaků</b> a <b>bez diakritiky</b> — to je omezení QR platby, ne naše;
+          háčky a čárky appka při vkládání do kódu sama odstraní, ať to banky přečtou.
+        </p>
+
+        <div class="texty">
+          ${TEXTY.map(
+            (t) => `<label for="t-${t.klic}">${esc(t.popis)}</label>
+          <input type="text" id="t-${t.klic}" data-text="${t.klic}" maxlength="200"
+                 value="${esc(nastaveni.texty[t.klic] ?? t.vychozi)}" placeholder="${esc(t.vychozi)}" />
+          <span class="note">výchozí: „${esc(t.vychozi)}"</span>`,
+          ).join('')}
+        </div>
+        <div class="tokenradek">
+          <button class="btn primary" type="button" id="ulozit-texty"
+                  title="Uloží texty do QR i věty na osobním přehledu">Uložit texty</button>
+          <span class="note" id="texty-stav"></span>
+        </div>
+        <p class="vysvetleni note">
+          Když pole u věty vyprázdníš, vrátí se výchozí znění uvedené pod ním.
+        </p>
       </div>
     </section>
 
@@ -335,6 +385,19 @@ el('ulozit-sledovani').addEventListener('click', async () => {
   const vysledek = await posli('/api/sledovani', { od: el('od').value.trim(), den: el('den').value.trim() });
   if (vysledek.ok) { znovu('sledovani'); return; }
   el('sledovani-stav').textContent = vysledek.chyba;
+});
+
+el('ulozit-texty').addEventListener('click', async () => {
+  el('texty-stav').textContent = 'ukládám…';
+  const texty = {};
+  document.querySelectorAll('[data-text]').forEach((pole) => { texty[pole.dataset.text] = pole.value; });
+  const vysledek = await posli('/api/texty', {
+    qr_prijemce: el('qr-prijemce').value,
+    qr_zprava: el('qr-zprava').value,
+    texty: texty,
+  });
+  if (vysledek.ok) { znovu('texty'); return; }
+  el('texty-stav').textContent = vysledek.chyba;
 });
 
 el('ulozit-token').addEventListener('click', async () => {

@@ -64,7 +64,8 @@ import {
   vyuctovatelneMesice,
 } from './settlement-page.js';
 import { renderDokumentace } from './docs-page.js';
-import { renderClen } from './member-page.js';
+import { proQr, renderClen } from './member-page.js';
+import { jeKlicTextu } from './texty.js';
 import {
   dalsiSplatnost,
   renderLog,
@@ -695,6 +696,48 @@ export default {
           }
           await ulozNastaveni(env.DB, 'vyuctovani_od', od, kdo, `Příspěvky se sledují od ${od}`);
           await ulozNastaveni(env.DB, 'den_splatnosti', String(den), kdo, `Splatnost nastavena na ${den}. den v měsíci`);
+          return json({ ok: true });
+        }
+
+        if (request.method === 'POST' && path === '/api/texty') {
+          const d = (await telo(request)) as {
+            qr_prijemce?: string;
+            qr_zprava?: string;
+            texty?: Record<string, string>;
+          };
+
+          // Do QR jde jen to, co projde přes `proQr` — ať se v Nastavení hned
+          // ukáže, co banka doopravdy uvidí, a ne co bylo napsané.
+          const prijemce = proQr(String(d.qr_prijemce ?? ''));
+          const zprava = proQr(String(d.qr_zprava ?? ''));
+          await ulozNastaveni(
+            env.DB,
+            'qr_prijemce',
+            prijemce,
+            kdo,
+            prijemce === '' ? 'Název příjemce v QR zrušen' : `Název příjemce v QR: ${prijemce}`,
+          );
+          await ulozNastaveni(
+            env.DB,
+            'qr_zprava',
+            zprava,
+            kdo,
+            zprava === '' ? 'Zpráva pro příjemce v QR zrušena' : `Zpráva pro příjemce v QR: ${zprava}`,
+          );
+
+          for (const [klic, hodnota] of Object.entries(d.texty ?? {})) {
+            // Cizí klíč do nastavení nepatří — zapisují se jen věty, které
+            // aplikace opravdu používá.
+            if (!jeKlicTextu(klic)) continue;
+            const text = String(hodnota).trim().slice(0, 200);
+            await ulozNastaveni(
+              env.DB,
+              klic,
+              text,
+              kdo,
+              text === '' ? `Text ${klic} vrácen na výchozí` : `Text ${klic}: „${text}"`,
+            );
+          }
           return json({ ok: true });
         }
 

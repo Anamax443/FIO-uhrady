@@ -99,11 +99,25 @@ export function maDalPoMesicich(
  * mobilní banka — příjemce, částka i variabilní symbol jsou v ní,
  * takže se nic nepřepisuje ručně a nevznikne překlep ve VS.
  */
+/**
+ * Diakritika v QR dělá v bankách paseku a delší text některé aplikace useknou —
+ * omezení je dané standardem, ne naším rozhodnutím. Co se do QR napíše, si
+ * ale určuje správce v Nastavení; appka žádný text sama nevymýšlí.
+ */
+export const proQr = (text: string): string =>
+  text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9 ./-]/g, '')
+    .trim()
+    .slice(0, 35);
+
 export function spaydRetezec(
   iban: string,
   castka: number,
   vs: string | null,
   zprava: string,
+  prijemce: string,
 ): string {
   const casti = [
     'SPD*1.0',
@@ -112,13 +126,12 @@ export function spaydRetezec(
     'CC:CZK',
   ];
   if (vs) casti.push(`X-VS:${vs}`);
-  // Diakritika ve zprávě dělá v bankách paseku, tak ji rovnou odstraním.
-  const cisteZprava = zprava
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^A-Za-z0-9 ./-]/g, '')
-    .slice(0, 35);
-  if (cisteZprava) casti.push(`MSG:${cisteZprava}`);
+  // Prázdné pole se do QR nedává vůbec — banka pak nabídne své vlastní
+  // předvyplnění místo prázdného řádku.
+  const jmeno = proQr(prijemce);
+  if (jmeno) casti.push(`RN:${jmeno}`);
+  const text = proQr(zprava);
+  if (text) casti.push(`MSG:${text}`);
   return casti.join('*');
 }
 
@@ -192,10 +205,13 @@ export function renderClen(
 ): string {
   const dluzi = radek.rozdil > 0;
   const castkaQr = radek.rozdil > 0 ? radek.rozdil : radek.zaloha;
-  const zprava = `Prispevek ${nastaveni.nazev_domu}`.slice(0, 35);
+  // Název příjemce i zpráva se berou z Nastavení. Prázdné = do QR nejdou;
+  // appka si žádný text nedomýšlí.
   const qr =
     iban && castkaQr > 0
-      ? qrSvg(spaydRetezec(iban, castkaQr, osoba.vs ?? null, zprava))
+      ? qrSvg(
+          spaydRetezec(iban, castkaQr, osoba.vs ?? null, nastaveni.qr_zprava, nastaveni.qr_prijemce),
+        )
       : null;
 
   // Souhrn za dům — bez rozpadu na osoby. Kdo kolik platí, sem nepatří.
@@ -263,6 +279,7 @@ export function renderClen(
 
   /* --- měsíc po měsíci: co měl poslat × co přišlo --- */
 
+  const t = nastaveni.texty;
   const mesice = maDalPoMesicich(zalohy, platby, osoba.id, nastaveni);
   const soucetMa = mesice.filter((m) => m.splatny).reduce((a, m) => a + m.maPoslat, 0);
   const soucetDal = mesice.reduce((a, m) => a + m.prislo, 0);
@@ -276,27 +293,25 @@ export function renderClen(
       // Barva se řídí **průběžným** zůstatkem, ne tím, co přišlo zrovna v tom
       // měsíci: dluh se přenáší dál a zajímá nás, jak to stojí po něm.
       const stav = m.zbyva > 0 ? 'chybi' : m.zbyva < 0 ? 'napred' : 'ok';
+      // Všechny tyhle věty se dají přepsat v Nastavení — appka jen vybírá,
+      // která se hodí, znění si píše správce.
       const zaMesic = !m.splatny
-        ? 'ještě není splatné'
+        ? t['text_nesplatne']
         : m.prislo === 0
-          ? 'v tomhle měsíci nepřišlo nic'
+          ? t['text_nic']
           : m.prislo < m.maPoslat
-            ? dleRodu(osoba.rod, {
-                zena: 'poslala jsi míň, než měla',
-                muz: 'poslal jsi míň, než měl',
-                neutr: 'přišlo míň, než mělo',
-              })
+            ? t['text_min']
             : m.prislo > m.maPoslat
-              ? 'poslané navíc se odečte'
-              : 'sedí';
+              ? t['text_navic']
+              : t['text_sedi'];
       const [rok, cislo] = m.mesic.split('-');
       return `<div class="mesic ${stav}">
       <span class="kdy">${Number(cislo)}/${rok?.slice(2) ?? ''}</span>
       <span class="cislo ma">${m.maPoslat === 0 ? '—' : formatKc(m.maPoslat)}</span>
       <span class="cislo dal">${m.prislo === 0 ? '—' : formatKc(m.prislo)}</span>
       <span class="cislo zbyva">${m.zbyva === 0 ? '—' : formatKc(Math.abs(m.zbyva))}</span>
-      <span class="popis">${zaMesic}${
-        m.zbyva < 0 ? ' · po tomhle měsíci máš předplaceno' : ''
+      <span class="popis">${esc(zaMesic ?? '')}${
+        m.zbyva < 0 ? ' · ' + esc(t['text_predplaceno'] ?? '') : ''
       }</span>
     </div>`;
     })
@@ -543,10 +558,7 @@ h2 { font-size: 15px; margin: 0 0 8px; }
         ? ''
         : `<section class="karta sekce" id="s-qr" data-nazev="QR platba">
       ${qr}
-      <p class="pozn">
-        Naskenuj v mobilní bance — částka i variabilní symbol se vyplní samy.
-        Když máš trvalý příkaz, tohle potřebovat nebudeš; hodí se na doplatek.
-      </p>
+      <p class="pozn">${esc(t['text_qr_pod'] ?? '')}</p>
     </section>`
     }
 
