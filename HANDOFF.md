@@ -18,6 +18,19 @@ odkaz už má: klik odkaz vytvořil, stránka se načetla a vypadala stejně —
 zvenčí to působilo, že tlačítko nereaguje. Opraveno; ověřeno lokálně, že se
 vytvoření i zrušení hned projeví.
 
+**Nastavení po sobě nechávalo stopu jen v datech, ne na obrazovce.** „Uložit
+identifikaci" i práce s odkazem končily prostým `location.reload()`, takže se
+stránka načetla stejná a vypadalo to, že se nic nestalo. Teď se stejně jako
+u Nákladů domu přesměruje na `?stav=…` a nahoře je zelený pruh s tím, co se
+stalo; tlačítka se během ukládání zamknou a hlásí „ukládám…".
+
+**Osobní odkaz se ukazoval jen jako cesta** `/v/…`, takže bez ručního doplnění
+domény nešel poslat. V poli je teď celá adresa (`url.origin` z requestu),
+kopíruje se přesně to, co je vidět.
+
+**Ikona do ouška prohlížeče** (`FAVICON` v `ui.ts`) — SVG přímo v adrese,
+žádný další požadavek. Je na všech stránkách včetně `/v/` a přihlášení.
+
 **Poznámka pro příště:** hláška *„Uložení se nepovedlo, zkus to prosím znovu"*
 schovala chybu schématu a poslala hledat úplně jinam. Přihlášenému adminovi
 by měla ukázat skutečnou příčinu (`no such column: view_token`). Neopraveno.

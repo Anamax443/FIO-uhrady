@@ -67,6 +67,14 @@ export function renderNastaveni(
   audit: ZaznamAuditu[],
   kdo: string,
   commit: string,
+  /** `https://…` bez lomítka na konci — odkaz musí jít poslat celý, ne jako cesta */
+  puvod: string,
+  /**
+   * Co se stalo těsně předtím, než se stránka načetla znovu. Bez toho by po
+   * uložení vypadala stránka úplně stejně a nešlo by poznat, jestli se něco
+   * stalo — člověk pak klikne podruhé.
+   */
+  stav: string | null = null,
 ): string {
   const jmeno = (id: number | null | undefined): string =>
     osoby.find((x) => x.id === id)?.jmeno ?? '';
@@ -105,9 +113,9 @@ export function renderNastaveni(
       <div class="odkaz">
         ${
           o.view_token
-            ? `<input type="text" class="mono" readonly value="/v/${esc(o.view_token)}" data-odkaz="${o.id}" aria-label="Osobní odkaz ${esc(o.jmeno)}" />
-               <button class="btn" type="button" data-kopiruj="${o.id}">Kopírovat</button>
-               <button class="btn" type="button" data-zrus-odkaz="${o.id}">Zrušit</button>`
+            ? `<input type="text" class="mono" readonly value="${esc(puvod)}/v/${esc(o.view_token)}" data-odkaz="${o.id}" aria-label="Osobní odkaz ${esc(o.jmeno)}" onfocus="this.select()" />
+               <button class="btn" type="button" data-kopiruj="${o.id}" title="Zkopíruje celou adresu do schránky — dá se rovnou poslat">Kopírovat</button>
+               <button class="btn" type="button" data-zrus-odkaz="${o.id}" title="Zneplatní odkaz; kdo ho má uložený, přestane se dostat na přehled">Zrušit</button>`
             : `<span class="note">osobní přehled zatím nemá</span>
                <button class="btn" type="button" data-vytvor-odkaz="${o.id}">Vytvořit odkaz</button>`
         }
@@ -130,8 +138,22 @@ export function renderNastaveni(
           )
           .join('');
 
+  const HLASKY: Record<string, string> = {
+    identifikace: 'Identifikace uložena. Změna je zapsaná v historii dole na stránce.',
+    'odkaz-vytvoren': 'Osobní odkaz vytvořen. Zkopíruj ho tlačítkem a pošli tomu, komu patří.',
+    'odkaz-zrusen': 'Osobní odkaz zrušen — starý odkaz od teď nikam nevede.',
+    sledovani: 'Sledování příspěvků uloženo.',
+    token: 'Token do Fio uložen. Další stažení pohybů ho použije.',
+  };
+  const hlaska = stav === null ? null : (HLASKY[stav] ?? null);
+
   const obsah = `${STYL}
   <div>
+    ${
+      hlaska === null
+        ? ''
+        : `<div class="hlaska ok">${esc(hlaska)}</div>`
+    }
     <section class="panel">
       <div class="panehead"><svg class="icon icon-sm"><use href="#i-users"/></svg>Podle čeho se poznají příspěvky</div>
       <div class="telo">
@@ -156,7 +178,11 @@ export function renderNastaveni(
           <span>Osoba</span><span>Na účet</span><span>VS</span><span>Číslo účtu</span><span>Podíl nese</span><span></span>
         </div>
         ${radky}
-        <div><button class="btn primary" type="button" id="ulozit-identifikaci">Uložit identifikaci</button></div>
+        <div class="tokenradek">
+          <button class="btn primary" type="button" id="ulozit-identifikaci"
+                  title="Uloží, kdo posílá na účet, jeho VS a kdo za koho nese podíl">Uložit identifikaci</button>
+          <span class="stav" id="identifikace-stav"></span>
+        </div>
       </div>
     </section>
 
@@ -216,6 +242,10 @@ export function renderNastaveni(
   const skript = `<script>
 const el = (id) => document.getElementById(id);
 
+// Po uložení se stránka načte znovu (přepočítat odvozené texty) — a rovnou
+// s tím, co se stalo. Prostý reload by vypadal, jako by se nestalo nic.
+const znovu = (stav) => location.assign('/admin/nastaveni?stav=' + stav);
+
 document.querySelectorAll('[data-platce]').forEach((box) => {
   if (box.tagName !== 'INPUT') return;
   box.addEventListener('change', () => {
@@ -236,6 +266,9 @@ async function posli(url, telo) {
 }
 
 el('ulozit-identifikaci').addEventListener('click', async () => {
+  const tlacitko = el('ulozit-identifikaci');
+  tlacitko.disabled = true;
+  el('identifikace-stav').textContent = 'ukládám…';
   const zmeny = [...document.querySelectorAll('.radek')].map((r) => {
     const id = Number(r.dataset.osoba);
     const hodnota = (sel) => { const v = r.querySelector(sel).value.trim(); return v === '' ? null : v; };
@@ -249,29 +282,36 @@ el('ulozit-identifikaci').addEventListener('click', async () => {
     };
   });
   const vysledek = await posli('/api/identifikace', { zmeny: zmeny });
-  if (vysledek.ok) { location.reload(); return; }
-  const stav = document.querySelector('[data-stav]');
-  if (stav) { stav.textContent = vysledek.chyba; stav.className = 'stav chyba'; }
+  if (vysledek.ok) { znovu('identifikace'); return; }
+  tlacitko.disabled = false;
+  el('identifikace-stav').textContent = vysledek.chyba;
+  el('identifikace-stav').className = 'stav chyba';
 });
 
 document.querySelectorAll('[data-vytvor-odkaz]').forEach((b) => {
   b.addEventListener('click', async () => {
+    b.disabled = true;
+    b.textContent = 'vytvářím…';
     const v = await posli('/api/odkaz', { member_id: Number(b.dataset.vytvorOdkaz) });
-    if (v.ok) location.reload(); else alert(v.chyba);
+    if (v.ok) { znovu('odkaz-vytvoren'); return; }
+    b.disabled = false;
+    b.textContent = 'Vytvořit odkaz';
+    alert(v.chyba);
   });
 });
 document.querySelectorAll('[data-zrus-odkaz]').forEach((b) => {
   b.addEventListener('click', async () => {
     if (!confirm('Zrušit odkaz? Kdo ho má uložený, přestane se dostat na přehled.')) return;
     const v = await posli('/api/odkaz/zrusit', { member_id: Number(b.dataset.zrusOdkaz) });
-    if (v.ok) location.reload(); else alert(v.chyba);
+    if (v.ok) { znovu('odkaz-zrusen'); return; }
+    alert(v.chyba);
   });
 });
 document.querySelectorAll('[data-kopiruj]').forEach((b) => {
   b.addEventListener('click', async () => {
+    // V poli je už celá adresa i s doménou — kopíruje se přesně to, co je vidět.
     const pole = document.querySelector('[data-odkaz="' + b.dataset.kopiruj + '"]');
-    const plny = location.origin + pole.value;
-    try { await navigator.clipboard.writeText(plny); b.textContent = 'Zkopírováno'; }
+    try { await navigator.clipboard.writeText(pole.value); b.textContent = 'Zkopírováno'; }
     catch { pole.select(); b.textContent = 'Vyber a zkopíruj'; }
     setTimeout(() => { b.textContent = 'Kopírovat'; }, 2000);
   });
@@ -280,7 +320,7 @@ document.querySelectorAll('[data-kopiruj]').forEach((b) => {
 el('ulozit-sledovani').addEventListener('click', async () => {
   el('sledovani-stav').textContent = 'ukládám…';
   const vysledek = await posli('/api/sledovani', { od: el('od').value.trim(), den: el('den').value.trim() });
-  if (vysledek.ok) { location.reload(); return; }
+  if (vysledek.ok) { znovu('sledovani'); return; }
   el('sledovani-stav').textContent = vysledek.chyba;
 });
 
@@ -288,7 +328,7 @@ el('ulozit-token').addEventListener('click', async () => {
   const pole = el('token');
   el('token-stav').textContent = 'ukládám…';
   const vysledek = await posli('/api/fio-token', { token: pole.value });
-  if (vysledek.ok) { pole.value = ''; location.reload(); return; }
+  if (vysledek.ok) { pole.value = ''; znovu('token'); return; }
   el('token-stav').textContent = vysledek.chyba;
 });
 </script>`;

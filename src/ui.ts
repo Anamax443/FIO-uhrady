@@ -9,6 +9,22 @@
 export const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/**
+ * Ikona do ouška prohlížeče — jinak tam svítí obecný globus.
+ *
+ * Je to ta samá značka jako v titulní liště (rámeček se dvěma řádky, „soupis"),
+ * jen vyplněná, aby byla čitelná i na 16 px. SVG přímo v adrese: žádný další
+ * požadavek na server a nic, co by šlo zapomenout nasadit. `#` musí být `%23`,
+ * jinak by ho prohlížeč vzal jako kotvu a ikona by se nenačetla.
+ */
+export const FAVICON =
+  `<link rel="icon" href="data:image/svg+xml,` +
+  `%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E` +
+  `%3Crect width='32' height='32' rx='6' fill='%2331628c'/%3E` +
+  `%3Crect x='8' y='10' width='16' height='3' rx='1.5' fill='%23fff'/%3E` +
+  `%3Crect x='8' y='17' width='11' height='3' rx='1.5' fill='%23fff'/%3E` +
+  `%3C/svg%3E" />`;
+
 const TOKENY_SVETLE = `
   --chrome: #edeff2; --chrome-hi: #f6f7f9; --pane: #ffffff; --head: #e3e7eb;
   --row-alt: #f8f9fb; --hover: #e6eaee; --border: #c9cfd6; --border-soft: #dde1e6;
@@ -277,6 +293,7 @@ export function uvodniStranka(commit: string, bezi: boolean): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>FIO-uhrady</title>
+${FAVICON}
 <style>${CSS}
 body { display: grid; place-items: center; padding: 24px; }
 .karta { width: min(520px, 100%); background: var(--pane); border: 1px solid var(--border); border-radius: 2px; }
@@ -347,6 +364,7 @@ export function shell(s: Shell): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${esc(s.titulek)} — FIO-uhrady</title>
+${FAVICON}
 <style>${CSS}</style>
 </head>
 <body>

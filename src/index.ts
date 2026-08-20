@@ -345,7 +345,17 @@ export default {
             nactiNastaveni(env.DB),
             nactiAudit(env.DB, 20),
           ]);
-          return html(renderNastaveni(osoby, nastaveni, audit, kdo, env.GIT_COMMIT ?? 'dev'));
+          return html(
+            renderNastaveni(
+              osoby,
+              nastaveni,
+              audit,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+              url.origin,
+              url.searchParams.get('stav'),
+            ),
+          );
         }
 
         if (request.method === 'GET' && path === '/admin/uhrady') {

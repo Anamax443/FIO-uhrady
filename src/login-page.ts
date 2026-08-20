@@ -2,7 +2,7 @@
  * Přihlašovací stránka. Veřejná, takže tu nesmí být žádná data ani nápověda,
  * co je uvnitř — jen pole na PIN a poctivá hláška, když se nepovede.
  */
-import { CSS, SYMBOLY, esc } from './ui.js';
+import { CSS, FAVICON, SYMBOLY, esc } from './ui.js';
 
 export function prihlasovaciStranka(commit: string, hlaska: string | null, blokSekund: number): string {
   const zablokovano = blokSekund > 0;
@@ -14,6 +14,7 @@ export function prihlasovaciStranka(commit: string, hlaska: string | null, blokS
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Přihlášení — FIO-uhrady</title>
+${FAVICON}
 <style>${CSS}
 body { display: grid; place-items: center; padding: 24px; }
 .karta { width: min(360px, 100%); background: var(--pane); border: 1px solid var(--border); border-radius: 2px; }

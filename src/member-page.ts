@@ -13,7 +13,7 @@ import type { Nastaveni } from './db.js';
 import type { RadekVyrovnani } from './more-pages.js';
 import { formatKc, popisPeriody, posunMesic } from './money.js';
 import type { Osoba, Prehled } from './model.js';
-import { esc } from './ui.js';
+import { esc, FAVICON } from './ui.js';
 
 export interface PlatbaClena {
   datum: string;
@@ -202,6 +202,7 @@ export function renderClen(
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
 <title>Můj příspěvek — ${esc(nastaveni.nazev_domu)}</title>
+${FAVICON}
 <style>
 :root {
   --pozadi: #f2f4f6; --karta: #ffffff; --text: #16202a; --tlumene: #667080;
