@@ -37,6 +37,7 @@ import {
   ulozPolozku,
   ulozIdentifikaci,
   ulozNastaveni,
+  ulozObdobiPlatby,
   ulozOsobu,
   nactiBehy,
   nactiUzaverky,
@@ -709,6 +710,19 @@ export default {
           const nastaveni = await nactiNastaveni(env.DB);
           const vysledek = await synchronizuj(env.DB, token, nastaveni.sync_window_days);
           return json({ ok: true, ...vysledek });
+        }
+
+        if (request.method === 'POST' && path === '/api/platba/obdobi') {
+          const d = (await telo(request)) as { fio_id?: string; obdobi?: string | null };
+          await ulozObdobiPlatby(
+            env.DB,
+            String(d.fio_id ?? ''),
+            d.obdobi === null || d.obdobi === undefined || String(d.obdobi).trim() === ''
+              ? null
+              : String(d.obdobi).trim(),
+            kdo,
+          );
+          return json({ ok: true });
         }
 
         if (request.method === 'POST' && path === '/api/platba/prirad') {

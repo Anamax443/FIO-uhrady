@@ -19,6 +19,8 @@ export interface PlatbaClena {
   datum: string;
   castka: number;
   matched_by: string | null;
+  /** měsíc, za který se platí; null u plateb stažených před zavedením údaje */
+  obdobi: string | null;
 }
 
 export interface MesicniBod {
@@ -51,10 +53,10 @@ export interface MesicMaDal {
 /**
  * Rozpad příspěvků po měsících od počátku sledování do dneška.
  *
- * Platba se počítá do měsíce, ve kterém přišla na účet. Když někdo pošle
- * zálohu za prosinec až v lednu, uvidí ji u ledna — a u prosince díru.
- * Je to nepřesné jen zdánlivě: součet za období sedí a je vidět, že se to
- * o měsíc posunulo, což je přesně ta informace, kterou člověk hledá.
+ * Platba se počítá do měsíce, **za který je** (`obdobi`), ne podle data
+ * připsání. Záloha za prosinec poslaná 3. ledna tak sedí u prosince.
+ * Předvyplňuje se měsícem platby a v Úhradách jde přepsat; u plateb stažených
+ * dřív, než tenhle údaj existoval, se použije měsíc z data.
  */
 export function maDalPoMesicich(
   zalohy: Zaloha[],

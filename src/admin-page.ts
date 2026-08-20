@@ -854,14 +854,6 @@ const telo = document.querySelector('#grid tbody');
 const vsechnyRadky = [...document.querySelectorAll('#grid tbody tr')];
 let razeni = { klic: null, smer: 1 };
 
-const kc = (halere) =>
-  new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 0, maximumFractionDigits: 0 })
-    .format(halere / 100);
-const kcZn = (halere) => {
-  const koruny = Math.round(halere / 100);
-  return (koruny > 0 ? '+' : koruny < 0 ? '−' : '') + kc(Math.abs(halere));
-};
-
 /** Text buňky pro řazení i pro textový filtr. */
 function hodnota(tr, klic) {
   const bunka = tr.querySelector('[data-klic="' + klic + '"]');

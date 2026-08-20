@@ -606,11 +606,11 @@ export async function osobaPodleTokenu(db: D1Database, token: string): Promise<O
 export async function platbyOsoby(db: D1Database, member_id: number, limit = 50) {
   const { results } = await db
     .prepare(
-      `select datum, castka, matched_by from payments
+      `select datum, castka, matched_by, obdobi from payments
         where member_id = ? and castka > 0 order by datum desc limit ?`,
     )
     .bind(member_id, limit)
-    .all<{ datum: string; castka: number; matched_by: string | null }>();
+    .all<{ datum: string; castka: number; matched_by: string | null; obdobi: string | null }>();
   return results;
 }
 
@@ -758,19 +758,63 @@ export interface Platba {
   jmeno: string | null;
   matched_by: string | null;
   matched_value: string | null;
+  /** měsíc, za který se platí — nemusí sedět s datem připsání */
+  obdobi: string | null;
 }
 
 export async function nactiPlatby(db: D1Database, limit = 200): Promise<Platba[]> {
   const { results } = await db
     .prepare(
       `select p.fio_id, p.datum, p.castka, p.mena, p.vs, p.protiucet, p.protiucet_nazev,
-              p.zprava, p.komentar, p.member_id, p.matched_by, p.matched_value, m.jmeno
+              p.zprava, p.komentar, p.member_id, p.matched_by, p.matched_value, p.obdobi, m.jmeno
          from payments p left join members m on m.id = p.member_id
         order by p.datum desc, p.fio_id desc limit ?`,
     )
     .bind(limit)
     .all<Platba>();
   return results;
+}
+
+/**
+ * Ke kterému měsíci se platba počítá.
+ *
+ * Datum připsání a měsíc, za který se platí, nemusí sedět: zálohu za prosinec
+ * pošle člověk 3. ledna. Bez možnosti to přepsat by prosinec zůstal s dírou
+ * a leden vypadal jako předplacený.
+ */
+export async function ulozObdobiPlatby(
+  db: D1Database,
+  fio_id: string,
+  obdobi: string | null,
+  kdo: string,
+): Promise<void> {
+  if (obdobi !== null && !/^\d{4}-(0[1-9]|1[0-2])$/.test(obdobi)) {
+    throw new ChybaVstupu('Měsíc čekám ve tvaru RRRR-MM, například 2026-01.');
+  }
+  const pred = await db
+    .prepare('select datum, castka, obdobi from payments where fio_id = ?')
+    .bind(fio_id)
+    .first<{ datum: string; castka: number; obdobi: string | null }>();
+  if (pred === null) throw new ChybaVstupu('Platba neexistuje.');
+
+  // Prázdné pole znamená „ber měsíc z data", ne „smaž údaj".
+  const novy = obdobi ?? pred.datum.slice(0, 7);
+  if (novy === pred.obdobi) return;
+
+  await db.batch([
+    db.prepare('update payments set obdobi = ? where fio_id = ?').bind(novy, fio_id),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'platba',
+      fio_id,
+      `Platba ${(pred.castka / 100).toLocaleString('cs-CZ')} Kč z ${pred.datum} se počítá za ${novy}` +
+        (pred.obdobi ? ` (dřív ${pred.obdobi})` : ''),
+      { obdobi: pred.obdobi },
+      { obdobi: novy },
+    ),
+  ]);
 }
 
 export interface Beh {

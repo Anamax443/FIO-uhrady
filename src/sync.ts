@@ -107,13 +107,17 @@ async function ulozPohyb(
     await db
       .prepare(
         `insert into payments (fio_id, datum, castka, mena, vs, ks, ss, protiucet, protiucet_nazev,
-                               zprava, komentar, uziv_ident, raw, member_id, matched_by, matched_value)
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               zprava, komentar, uziv_ident, raw, member_id, matched_by, matched_value, obdobi)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         p.fio_id, p.datum, p.castka, p.mena, p.vs, p.ks, p.ss, p.protiucet, p.protiucet_nazev,
         p.zprava, p.komentar, p.uziv_ident, p.raw,
         shoda?.member_id ?? null, shoda?.matched_by ?? null, shoda?.matched_value ?? null,
+        // Předvyplní se měsíc, kdy platba přišla. Kdo platil za jiný měsíc,
+        // přepíše si to v Úhradách; další běh to už nepřepíše zpátky, protože
+        // se u známého pohybu `obdobi` nesahá.
+        p.datum.slice(0, 7),
       )
       .run();
     return 1;

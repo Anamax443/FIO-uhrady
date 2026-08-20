@@ -27,6 +27,9 @@ table { min-width: 900px; }
 .col-cast { width: 104px; }
 .col-vs { width: 92px; font-family: var(--mono); }
 .col-kdo { width: 150px; }
+.col-obdobi { width: 96px; }
+.col-obdobi input { width: 100%; height: 20px; padding: 0 4px; font-family: var(--mono); font-size: 11.5px; }
+.col-obdobi input.zmeneno { border-color: var(--accent); color: var(--accent); }
 .col-jak { width: 178px; color: var(--text-dim); }
 .protistrana { color: var(--text-dim); }
 .prazdno { padding: 26px 18px; color: var(--text-dim); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
@@ -67,6 +70,10 @@ export function renderUhrady(
                   p.matched_value ? ` (${esc(p.matched_value)})` : ''
                 }`
               : '<span class="s-warn"><span class="dot"></span>nepoznáno</span>';
+            // Prázdné `obdobi` mají jen platby stažené před zavedením sloupce —
+            // pro ně platí měsíc z data, ať v tabulce nesvítí prázdno.
+            const obdobi = p.obdobi ?? p.datum.slice(0, 7);
+            const jinyMesic = obdobi !== p.datum.slice(0, 7);
             return `<tr>
     <td class="col-datum">${esc(p.datum)}</td>
     <td class="col-num col-cast">${formatKc(p.castka)}</td>
@@ -74,6 +81,12 @@ export function renderUhrady(
     <td>${esc(p.protiucet_nazev ?? '')} <span class="protistrana">${esc(p.komentar ?? p.zprava ?? '')}</span></td>
     <td class="col-kdo">
       <select class="prirad" data-platba="${esc(p.fio_id)}" aria-label="Komu patří platba">${volby(p.member_id)}</select>
+    </td>
+    <td class="col-obdobi">
+      <input type="text" class="obdobi${jinyMesic ? ' zmeneno' : ''}" value="${esc(obdobi)}"
+             data-obdobi="${esc(p.fio_id)}" inputmode="numeric" maxlength="7" placeholder="RRRR-MM"
+             aria-label="Za který měsíc platba je"
+             title="${jinyMesic ? 'Ručně přepsáno — platba přišla ' + esc(p.datum) : 'Předvyplněno podle data platby; dá se přepsat, když někdo platí za jiný měsíc'}" />
     </td>
     <td class="col-jak">${jak}</td>
   </tr>`;
@@ -114,7 +127,9 @@ export function renderUhrady(
         <thead><tr>
           <th class="col-datum">Datum</th><th class="col-num col-cast">Částka</th>
           <th class="col-vs">VS</th><th>Plátce a poznámka</th>
-          <th class="col-kdo">Přiřazeno</th><th class="col-jak">Jak se poznalo</th>
+          <th class="col-kdo">Přiřazeno</th>
+          <th class="col-obdobi" title="Měsíc, za který se platí — nemusí sedět s datem připsání">Za měsíc</th>
+          <th class="col-jak">Jak se poznalo</th>
         </tr></thead>
         <tbody>${radky}</tbody>
       </table>
@@ -154,6 +169,23 @@ document.querySelectorAll('.prirad').forEach((s) => {
     if (v.ok) location.reload();
     else { el('stav-syncu').textContent = v.data.chyba || 'Přiřazení se nepovedlo.'; }
   });
+});
+
+// Měsíc se ukládá až po opuštění pole — jinak by se posílal po každé číslici.
+document.querySelectorAll('.obdobi').forEach((pole) => {
+  const puvodni = pole.value;
+  const uloz = async () => {
+    if (pole.value.trim() === puvodni) return;
+    const v = await posli('/api/platba/obdobi', {
+      fio_id: pole.dataset.obdobi,
+      obdobi: pole.value.trim() === '' ? null : pole.value.trim(),
+    });
+    if (v.ok) { location.reload(); return; }
+    el('stav-syncu').textContent = v.data.chyba || 'Měsíc se nepovedlo uložit.';
+    pole.value = puvodni;
+  };
+  pole.addEventListener('blur', uloz);
+  pole.addEventListener('keydown', (e) => { if (e.key === 'Enter') pole.blur(); });
 });
 </script>`;
 
