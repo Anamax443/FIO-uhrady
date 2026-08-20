@@ -77,7 +77,7 @@ import { mesicNyni, popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
 import { synchronizuj } from './sync.js';
-import { uvodniStranka } from './ui.js';
+import { esc, FAVICON, uvodniStranka } from './ui.js';
 
 const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data, null, 2), {
@@ -140,6 +140,37 @@ const denied = (): Response =>
 </body></html>`,
     403,
   );
+
+/**
+ * Přeloží technickou chybu na větu, která říká pravdu.
+ *
+ * „Zkus to prosím znovu" je u chybějícího sloupce lež — opakování nepomůže
+ * a člověk pak hledá chybu tam, kde není. Do správy se dostane jen přihlášený
+ * admin, takže smí vidět i skutečnou příčinu.
+ */
+function popisChyby(detail: string): string {
+  if (/no such (table|column)/i.test(detail)) {
+    return 'Databázi chybí část schématu, takže tohle projít nemůže a opakování nepomůže. Dojeď migrace ze složky schema/ (na ostré databázi po jednotlivých --command, --file Cloudflare odmítá).';
+  }
+  if (/UNIQUE constraint/i.test(detail)) {
+    return 'Taková hodnota už v databázi je — nejspíš se dvakrát opakuje něco, co má být jedinečné (třeba VS nebo jméno).';
+  }
+  if (/D1_ERROR|Network|fetch failed/i.test(detail)) {
+    return 'Databáze neodpověděla. Tady opakování smysl má — zkus to prosím za chvíli znovu.';
+  }
+  return 'Uložení se nepovedlo. Podrobnost je níž a taky v logu Workeru.';
+}
+
+const chybovaStranka = (chyba: string, detail: string, commit: string): string =>
+  `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Chyba — FIO-uhrady</title>
+${FAVICON}</head>
+<body style="font:15px/1.6 system-ui;max-width:40rem;margin:10vh auto;padding:0 1.25rem">
+<h1 style="font-size:1.35rem">Stránku se nepovedlo sestavit</h1>
+<p>${esc(chyba)}</p>
+<p style="color:#666;font-size:.9rem">Technicky: <code>${esc(detail)}</code></p>
+<p><a href="/admin">Zpátky do správy</a> · verze <code>${esc(commit)}</code></p>
+</body></html>`;
 
 /**
  * Zápis přijímáme jen z vlastní stránky. Bez téhle kontroly by stačilo, aby
@@ -709,8 +740,13 @@ export default {
         }
       } catch (err) {
         if (err instanceof ChybaVstupu) return json({ chyba: err.message }, 400);
-        console.error(JSON.stringify({ udalost: 'chyba', cesta: path, detail: String(err) }));
-        return json({ chyba: 'Uložení se nepovedlo, zkus to prosím znovu.' }, 500);
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(JSON.stringify({ udalost: 'chyba', cesta: path, detail }));
+        const chyba = popisChyby(detail);
+        // Rozbitá stránka má vypadat jako stránka, ne jako kus JSONu.
+        return request.method === 'GET' && !jeApi
+          ? html(chybovaStranka(chyba, detail, env.GIT_COMMIT ?? 'dev'), 500)
+          : json({ chyba, detail }, 500);
       }
 
       return notBuilt(path);
@@ -719,53 +755,64 @@ export default {
     // Osobní přehled na neuhodnutelném odkazu — veřejný, jen ke čtení.
     // Kdo odkaz nemá, sem nemá jak trefit; kdo ho má, vidí jen svoje čísla.
     if (path.startsWith('/v/')) {
-      const osoba = await osobaPodleTokenu(env.DB, path.slice(3));
-      if (osoba === null) {
-        return html(
-          `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Odkaz neplatí</title></head>
+      try {
+        const osoba = await osobaPodleTokenu(env.DB, path.slice(3));
+        if (osoba === null) {
+          return html(
+            `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Odkaz neplatí</title>
+${FAVICON}</head>
 <body style="font:16px/1.6 system-ui;max-width:30rem;margin:14vh auto;padding:0 1.25rem">
 <h1 style="font-size:1.3rem">Tenhle odkaz už neplatí</h1>
 <p>Buď byl zrušený, nebo je špatně opsaný. Požádej o nový toho, kdo ti ho poslal.</p>
 </body></html>`,
-          404,
+            404,
+          );
+        }
+
+        const s = await stavVyrovnani(env.DB);
+        const { prehled, nastaveni, uzaverky } = s;
+        const platby = await platbyOsoby(env.DB, osoba.id);
+
+        const { radky } = vyrovnani(prehled, s.zaplaceno, s.zalohy, nastaveni, uzaverky, s.zustatky);
+        // Nezletilé dítě nemá vlastní řádek — ukáže se ten, kdo za něj závazek nese.
+        const muj =
+          radky.find((r) => r.osoba.id === osoba.id) ??
+          radky.find((r) => r.zastupuje.includes(osoba.jmeno));
+        if (muj === undefined) return notBuilt('přehled: osoba nemá spočítaný podíl');
+
+        const iban = await env.DB.prepare("select hodnota from settings where klic = 'iban_domu'")
+          .first<{ hodnota: string }>();
+
+        return html(
+          renderClen(
+            osoba,
+            muj,
+            vyvojPodilu(prehled, uzaverky, nastaveni, muj.osoba.id),
+            platby,
+            prehled,
+            nastaveni,
+            iban?.hodnota ?? null,
+            dalsiSplatnost(nastaveni.den_splatnosti),
+            env.GIT_COMMIT ?? 'dev',
+          ),
+        );
+      } catch (err) {
+        // Sem chodí člen domácnosti, ne správce — technický detail mu nic neřekne
+        // a leze do něj vnitřek databáze. Podrobnost zůstane v logu Workeru.
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(JSON.stringify({ udalost: 'chyba', cesta: '/v/…', detail }));
+        return html(
+          `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Přehled se nenačetl</title>
+${FAVICON}</head>
+<body style="font:16px/1.6 system-ui;max-width:30rem;margin:14vh auto;padding:0 1.25rem">
+<h1 style="font-size:1.3rem">Přehled se teď nenačetl</h1>
+<p>Odkaz je v pořádku, chyba je na naší straně. Zkus to za chvíli znovu — a když to bude trvat, řekni o tom tomu, kdo ti odkaz poslal.</p>
+</body></html>`,
+          500,
         );
       }
-
-      const s = await stavVyrovnani(env.DB);
-      const { prehled, nastaveni, uzaverky } = s;
-      const platby = await platbyOsoby(env.DB, osoba.id);
-
-      const { radky } = vyrovnani(
-        prehled,
-        s.zaplaceno,
-        s.zalohy,
-        nastaveni,
-        uzaverky,
-        s.zustatky,
-      );
-      // Nezletilé dítě nemá vlastní řádek — ukáže se ten, kdo za něj závazek nese.
-      const muj =
-        radky.find((r) => r.osoba.id === osoba.id) ??
-        radky.find((r) => r.zastupuje.includes(osoba.jmeno));
-      if (muj === undefined) return notBuilt('přehled: osoba nemá spočítaný podíl');
-
-      const iban = await env.DB.prepare("select hodnota from settings where klic = 'iban_domu'")
-        .first<{ hodnota: string }>();
-
-      return html(
-        renderClen(
-          osoba,
-          muj,
-          vyvojPodilu(prehled, uzaverky, nastaveni, muj.osoba.id),
-          platby,
-          prehled,
-          nastaveni,
-          iban?.hodnota ?? null,
-          dalsiSplatnost(nastaveni.den_splatnosti),
-          env.GIT_COMMIT ?? 'dev',
-        ),
-      );
     }
 
     if (path === '/') {

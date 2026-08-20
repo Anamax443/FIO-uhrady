@@ -31,9 +31,19 @@ kopíruje se přesně to, co je vidět.
 **Ikona do ouška prohlížeče** (`FAVICON` v `ui.ts`) — SVG přímo v adrese,
 žádný další požadavek. Je na všech stránkách včetně `/v/` a přihlášení.
 
-**Poznámka pro příště:** hláška *„Uložení se nepovedlo, zkus to prosím znovu"*
-schovala chybu schématu a poslala hledat úplně jinam. Přihlášenému adminovi
-by měla ukázat skutečnou příčinu (`no such column: view_token`). Neopraveno.
+**Chybová hláška říká pravdu** (`popisChyby` v `index.ts`). Dnešní *„Uložení se
+nepovedlo, zkus to prosím znovu"* u chybějícího sloupce lhala — opakování
+nepomůže. Teď se chybějící schéma, porušená jedinečnost a výpadek databáze
+rozliší a každá varianta řekne, co s tím; do správy se dostane jen přihlášený
+admin, takže vidí i technický detail. Rozbitá **stránka** je stránka, ne JSON.
+
+Osobní přehled `/v/…` má vlastní záchyt: člen domácnosti dostane srozumitelnou
+větu bez vnitřku databáze, podrobnost jde do logu Workeru. Předtím byl mimo
+`try` a spadl by do holé hlášky Workeru.
+
+Ověřeno lokálně přejmenováním tabulky `vyuctovani`: stránka vrátí 500 s větou
+o chybějícím schématu a `D1_ERROR: no such table: vyuctovani`, `/v/` vrátí
+klidnou hlášku. Po vrácení tabulky všechno zase 200.
 
 ## 2026-08-20 — vyúčtování období (bod 4 z dohodnutého pořadí)
 
