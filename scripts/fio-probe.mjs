@@ -42,15 +42,41 @@ const FIELDS = {
   column10: 'název protiúčtu',
 };
 
+/**
+ * Popíše token, aniž by ho vypsal. Když se do `.dev.vars` sveze uvozovka,
+ * mezera nebo se token ořízne, je to vidět tady — jinak by se hádalo,
+ * jestli chybu dělá token, nebo banka.
+ */
+function popisTokenu(t) {
+  const cizi = [...new Set(t.match(/[^A-Za-z0-9]/g) ?? [])].map((z) => JSON.stringify(z)).join(' ');
+  return (
+    `délka ${t.length} ${t.length === 64 ? '(sedí)' : 'znaků — token z Fio má normálně 64'}` +
+    (cizi ? `, obsahuje i tyhle znaky navíc: ${cizi}` : ', samá písmena a číslice')
+  );
+}
+
 const tk = token();
 const url = `https://fioapi.fio.cz/v1/rest/periods/${tk}/${iso(from)}/${iso(to)}/transactions.json`;
 console.log(`GET periods/****/${iso(from)}/${iso(to)}/transactions.json`);
+console.log(`Token: ${popisTokenu(tk)}`);
 
 const res = await fetch(url);
 if (!res.ok) {
-  console.error(`HTTP ${res.status} ${res.statusText}` +
-    (res.status === 409 ? ' — limit Fio API: 1 dotaz za 30 s, zkus to za chvíli.' : '') +
-    (res.status === 404 ? ' — neplatný token.' : ''));
+  // Fio u chyby posílá tělo s vysvětlením — bez něj se hádá naslepo.
+  const telo = (await res.text().catch(() => '')).trim().slice(0, 500);
+  const rada =
+    res.status === 409
+      ? 'Limit Fio API: 1 dotaz za 30 s. Počkej půl minuty a spusť znovu.'
+      : res.status === 404
+        ? 'Fio token nezná — je zrušený, opsaný s chybou, nebo patří k jinému účtu.'
+        : res.status === 500
+          ? 'Fio hlásí chybu na své straně. Nejčastěji ale sedí na tokenu: zkontroluj, ' +
+            'že v .dev.vars je jen samotný token bez uvozovek a mezer, a že je vydaný pro tenhle účet. ' +
+            'Když je token v pořádku, zkus to za pár minut — Fio API občas vypadává.'
+          : 'Podívej se na tělo odpovědi níž.';
+
+  console.error(`\nHTTP ${res.status} ${res.statusText}\n${rada}`);
+  if (telo) console.error(`\nCo poslalo Fio:\n${telo}`);
   process.exit(1);
 }
 

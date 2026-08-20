@@ -64,14 +64,21 @@ export async function stahniPohyby(
   const odpoved = await fetch(`${ZAKLAD}/periods/${token}/${od}/${doDne}/transactions.json`);
 
   if (!odpoved.ok) {
-    // Hlášky mají dávat smysl i tomu, kdo Fio API nezná.
+    // Hlášky mají dávat smysl i tomu, kdo Fio API nezná — tohle se čte
+    // v Logu synchronizace, kde samotné číslo stavu nikomu nepomůže.
     if (odpoved.status === 409) {
-      throw new ChybaFio('Fio API pustí jen jeden dotaz za 30 sekund. Zkus to za chvíli.');
+      throw new ChybaFio('Fio API pustí jen jeden dotaz za 30 sekund. Další běh to zkusí znovu.');
     }
     if (odpoved.status === 404) {
       throw new ChybaFio('Fio API odmítlo token. Zkontroluj ho v Nastavení — možná byl zrušený.');
     }
-    throw new ChybaFio(`Fio API vrátilo ${odpoved.status}.`);
+    if (odpoved.status === 500) {
+      throw new ChybaFio(
+        'Fio hlásí chybu na své straně (HTTP 500). Stahování se nepovedlo, ale nic se neztratilo — ' +
+          'stahuje se vždycky za celé období, takže další běh to dožene. Když to trvá, ověř token v Nastavení.',
+      );
+    }
+    throw new ChybaFio(`Fio API odpovědělo neočekávaně (HTTP ${odpoved.status}). Další běh to zkusí znovu.`);
   }
 
   const data = (await odpoved.json()) as {

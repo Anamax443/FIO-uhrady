@@ -45,6 +45,14 @@ Ověřeno lokálně přejmenováním tabulky `vyuctovani`: stránka vrátí 500 
 o chybějícím schématu a `D1_ERROR: no such table: vyuctovani`, `/v/` vrátí
 klidnou hlášku. Po vrácení tabulky všechno zase 200.
 
+**Sonda do Fio hlásila `HTTP 500` — byl to výpadek na straně banky, ne chyba
+u nás.** Při dalším běhu prošla: token má 64 znaků, `column25` vyplněný u všech
+3 pohybů, párování podle VS i podle komentáře drží. Sonda teď navíc popíše
+token, aniž by ho vypsala (délka a jestli se do něj nesvezla uvozovka nebo
+mezera), a u chyby vypíše, co Fio poslalo v těle. `src/fio.ts` rozlišuje 500
+zvlášť a v Logu synchronizace vysvětlí, že se nic neztratilo — stahuje se za
+celé období, takže další běh výpadek dožene.
+
 ## 2026-08-20 — vyúčtování období (bod 4 z dohodnutého pořadí)
 
 Kruh se uzavřel: záloha × skutečnost se teď dá **srovnat a rozdíl rozpustit
