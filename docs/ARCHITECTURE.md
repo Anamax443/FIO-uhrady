@@ -41,15 +41,24 @@ Z textových polí (2–4) se **neberou libovolná čísla**. Vytáhnou se čís
 
 Každé párování nese `matched_by` + `matched_value` + čas. V přehledu i v adminu je proto vidět *„spárováno z komentáře: 240137"*, ne jen tichá změna čísla. Ruční přiřazení se od automatického vizuálně liší.
 
-## Datový model (návrh)
+## Datový model
 
-- `payers` — plátce: interní označení (pseudonym), reálné jméno, jeho VS
-- `plans` — paušál: plátce, částka, den splatnosti, platnost od/do
-- `charges` — předpis: plátce, období, částka, splatnost, titul, původ (paušál / jednorázový)
-- `payments` — pohyb z Fio: `fio_id` (PK), datum, částka, měna, VS/KS/SS, protiúčet a jeho název, `column16`, `column25`, `column7`, syrový JSON
-- `allocations` — přiřazení částky platby na konkrétní předpis (platba může pokrýt víc předpisů i jen část jednoho)
-- `settings` — `view_token`, `show_real_names`, okno stahování, …
+Zadání se od prvního návrhu posunulo: appka neeviduje předpisy, ale **náklady domu**
+a **zálohy** na ně (viz HANDOFF.md). Tabulky ve schématu:
+
+- `members` — osoba: jméno, VS, číslo účtu, `je_platce` (chodí od ní příspěvek na účet), `pod_member_id` (za koho nese závazek někdo jiný), `view_token`
+- `cost_items` — položka nákladů: částka za období, perioda, druh, datum, rozpouštění (`rozpustit_od`, `rozpustit_mesicu`), `zdroj_uhrady` (účet × ze svého)
+- `cost_shares` — podíl osoby na položce, procentem nebo pevnou částkou
+- `zalohy` — historie záloh: osoba, částka, platnost od; **nepřepisuje se**, aby zpětný výpočet seděl
+- `uzaverky`, `uzaverka_podily`, `uzaverka_polozky` — zamražený měsíc: náklady, podíly, zálohy, soupis položek
+- `vyuctovani`, `vyuctovani_radky` — uzavřené období: předepsáno / zaplaceno / skutečnost, jak se rozdíl vypořádal a co zbylo mimo zálohu
+- `payments` — pohyb z Fio: `fio_id` (PK), datum, částka, měna, VS/KS/SS, protiúčet a jeho název, `column16`, `column25`, `column7`, syrový JSON, přiřazená osoba a čím se poznala
+- `settings` — `vyuctovani_od` (počátek běžícího období), `den_splatnosti`, `rezerva_procent`, `prah_doplatku`, okno stahování, token do Fio, …
+- `audit_log` — kdo, kdy, co změnil a z čeho na co; zapisuje se ve stejné dávce jako změna
 - `sync_runs` — deník běhů: kdy, za jaké období, kolik nových, kolik spárovaných, případná chyba
+
+`vyuctovani_od` je klíčové pro správnost: uložením vyúčtování se posune za konec období,
+takže se jednou zúčtované peníze v dalším období nepočítají znovu.
 
 ## Zobrazování jmen
 

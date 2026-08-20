@@ -12,6 +12,7 @@ import {
   mesicne,
   popisDruhu,
   popisPeriody,
+  posunMesic,
   rozpad,
   znamenko,
 } from './money.js';
@@ -121,6 +122,50 @@ export function spocitej(prehled: Prehled, mesic: string = mesicNyni()): Souhrn 
     saldoOsoba,
     nedokoncenych,
   };
+}
+
+/**
+ * Kolik ta položka **stojí v daném měsíci** — nula, když do něj nespadá.
+ *
+ * `spocitej` počítá totéž, ale rozpadlé na osoby. Tady jde o celou částku:
+ * kdo ji zaplatil ze svého, tomu se za ten měsíc připisuje.
+ */
+export function castkaVMesici(p: Polozka, mesic: string): number {
+  if (seRozpousti(p)) {
+    return rozpousteneVMesici(p, mesic) ? Math.round(p.castka_celkem / (p.rozpustit_mesicu ?? 1)) : 0;
+  }
+  if (jeJednorazovy(p.druh)) {
+    // Bez data se jednorázová položka počítá do aktuálního měsíce — stejně
+    // jako v `spocitej`, ať vklad a náklad nesedí každý v jiném měsíci.
+    const vMesici = p.datum ? p.datum.slice(0, 7) === mesic : mesic === mesicNyni();
+    return vMesici ? znamenko(p.druh) * p.castka_celkem : 0;
+  }
+  return mesicne(p.castka_celkem, p.perioda);
+}
+
+/**
+ * Kolik kdo za dané měsíce vložil **ze svého** (položky se `zdroj_uhrady = 'osoba'`).
+ *
+ * Děda, který koupil uhlí z vlastní kapsy, vložil do domácnosti stejně reálné
+ * peníze jako ten, kdo pošle příkazem. Počítá se to po měsících, ne celou
+ * částkou najednou: pravidelný náklad placený ze svého se připisuje každý
+ * měsíc, rozpouštěný nákup po dílech, jednorázový v měsíci svého data.
+ */
+export function vlozenoZeSveho(prehled: Prehled, odMesice: string, doMesice: string): Map<number, number> {
+  const vklady = new Map<number, number>();
+  const od = cisloMesice(odMesice);
+  const konec = cisloMesice(doMesice);
+  if (od === 0 || konec < od) return vklady;
+
+  for (const p of prehled.polozky) {
+    if (p.zdroj_uhrady !== 'osoba' || p.hradi_member_id === null) continue;
+    let soucet = 0;
+    for (let i = 0; od + i <= konec; i++) soucet += castkaVMesici(p, posunMesic(odMesice, i));
+    if (soucet !== 0) {
+      vklady.set(p.hradi_member_id, (vklady.get(p.hradi_member_id) ?? 0) + soucet);
+    }
+  }
+  return vklady;
 }
 
 /* ---------- části stránky ---------- */

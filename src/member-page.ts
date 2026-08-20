@@ -279,12 +279,19 @@ h2 { font-size: 15px; margin: 0 0 8px; }
     <h2>Jak to vychází</h2>
     <div class="rozpis">
       <span>Předepsané zálohy</span><span class="cislo">${formatKc(radek.predepsano)}</span>
+      ${
+        radek.zustatek !== 0
+          ? `<span>${radek.zustatek > 0 ? 'Doplatek z vyúčtování' : 'K dobru z vyúčtování'}</span><span class="cislo">${formatKc(
+              Math.abs(radek.zustatek),
+            )}</span>`
+          : ''
+      }
       <span>Zaplaceno</span><span class="cislo">${formatKc(radek.zaplaceno)}</span>
       <span class="soucet">${dluzi ? 'Zbývá doplatit' : 'Rozdíl'}</span><span class="cislo soucet">${formatKc(Math.abs(radek.rozdil))}</span>
     </div>
     <p class="pozn">
       Skutečný podíl na nákladech za sledované období je ${formatKc(radek.skutecne)}. Rozdíl proti
-      zálohám se srovná při ročním vyúčtování — přeplatek sníží příští zálohu, nedoplatek ji zvýší.
+      zálohám se srovná při vyúčtování — přeplatek sníží příští zálohu, nedoplatek ji zvýší.
     </p>
   </section>
 

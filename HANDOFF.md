@@ -2,6 +2,58 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — vyúčtování období (bod 4 z dohodnutého pořadí)
+
+Kruh se uzavřel: záloha × skutečnost se teď dá **srovnat a rozdíl rozpustit
+do nové zálohy**, aby trvalý příkaz mohl zůstat fixní.
+
+**Nová stránka `/admin/vyuctovani`** (`src/settlement-page.ts`):
+- Vyúčtovat jde jen **uzavřené a navazující** měsíce od počátku sledování —
+  z otevřeného měsíce se počítá dnešními čísly a vyúčtování by se zpětně měnilo.
+  Konec období si admin vybere ze seznamu.
+- U každého: předepsané zálohy / skutečně zaplaceno / skutečný podíl → rozdíl.
+- **Rozpustit do zálohy** (rozdíl / 12 k nové záloze) × **doplatit jednorázově**.
+  Nedoplatek nad `prah_doplatku` appka sama rozpustit nenavrhne, radši se zeptá.
+  Částku zálohy jde přepsat ručně — appka ji nikdy nestanoví sama.
+- Uložení jde **jednou dávkou**: zamražené řádky + nové zálohy od dalšího měsíce
+  + posun `vyuctovani_od` + audit. Čísla se počítají znovu na serveru, z prohlížeče
+  se berou jen rozhodnutí.
+- Zrušit jde **jen poslední** vyúčtování (starší by se nedalo vrátit, aniž by se
+  novější počítalo dvakrát); sledování se vrátí na začátek období, zálohy zůstanou.
+
+**Dvě věci, které by jinak tiše lhaly:**
+1. **Platby se berou za období** (`zaplacenoOsobami` má okno). Bez toho by se peníze
+   zúčtované v minulém období odečítaly od dluhu i v tom dalším — donekonečna.
+2. **Vklad ze svého se počítá po měsících**, ne celou částkou (`vlozenoZeSveho`).
+   Uhlí za 42 000 se rozpouští po 3 500, takže se dědovi po 3 500 i připisuje;
+   jinak by v měsíci nákupu skočil do obřího přeplatku.
+
+**Komu se co eviduje:** u toho, od koho příspěvky na účet nechodí, se **dluh
+nesleduje** (drží se dřívější rozhodnutí — narůstající číslo by nic neznamenalo).
+Peníze, které do domácnosti opravdu dal, se ale zapsat musí, takže se u něj
+ukládá jen **záporný** zůstatek = pohledávka. Ve Vyrovnání i na osobním přehledu
+je zůstatek z vyúčtování vidět zvlášť, mimo zálohu.
+
+**Ověřeno lokálně** proti místní D1 s daty (`wrangler dev`, DEV_ADMIN):
+uzavřeno 2026-01 – 2026-08, vyúčtováno oběma způsoby a zrušeno.
+- Rozpuštění: Lucka předepsáno 48 700, zaplaceno 42 200, skutečnost 45 851 →
+  nedoplatek 3 651; záloha 6 900 (ze samotných nákladů) → 7 200 s rozdílem. Sedí ručnímu propočtu.
+- Jednorázově: zůstatek 3 651 se objevil ve Vyrovnání i na `/v/{token}` včetně QR.
+- Pohledávka: nákup 30 000 dědou ze svého → −25 678 zapsáno, „má k dobru" ve Vyrovnání.
+- Zrušení vrátilo `vyuctovani_od` zpátky. Všech 11 stránek adminu 200, typecheck OK.
+
+**Opraveno při testu:** vyúčtování zakládalo nulovou zálohu i tomu, kdo žádnou
+neplatí — v historii záloh by ta nula přebila starší platnou částku.
+
+**Nasazení — dělá uživatel:**
+```powershell
+npx wrangler d1 execute fio-uhrady --remote --file schema/0009_vyuctovani.sql
+npm run deploy
+```
+
+**Zbývá:** AI (6) — čtení účtenek a komentář k vývoji, dál e-maily přes Resend,
+import CSV a Cloudflare Access místo PINu.
+
 ## 2026-08-20 — zálohy, rozpouštění, uzávěrky a osobní přehled
 
 Zadání se upřesnilo do modelu **záloh a vyúčtování** (jako u energií):

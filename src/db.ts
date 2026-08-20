@@ -5,7 +5,8 @@
  * Změna i její záznam jdou jednou `db.batch()`, takže se buď zapíše obojí,
  * nebo nic — nemůže vzniknout změna, u které není vidět kdo a kdy.
  */
-import { jeDruh, jePerioda, type Podil, type Rezim } from './money.js';
+import { vlozenoZeSveho } from './admin-page.js';
+import { jeDruh, jePerioda, mesicNyni, posunMesic, type Podil, type Rezim } from './money.js';
 import type { Osoba, Polozka, Prehled } from './model.js';
 
 export interface Nastaveni {
@@ -116,32 +117,38 @@ export async function ulozOsobu(
 }
 
 /**
- * Kolik kdo do domácnosti vložil. Klíč = member_id.
+ * Kolik kdo do domácnosti vložil **za dané měsíce**. Klíč = member_id.
  *
  * Nejsou to jen příchozí platby na účet — započítá se i to, co někdo zaplatil
  * **ze svého** (položky se `zdroj_uhrady = 'osoba'`). Děda, který koupil uhlí
  * za 42 000 z vlastní kapsy, vložil do domácnosti stejně reálné peníze jako
  * ten, kdo pošle příkazem.
+ *
+ * Okno je povinné, protože po vyúčtování začíná nové období: bez něj by se
+ * peníze poslané před vyúčtováním odečítaly od dluhu i potom, co už byly
+ * jednou zúčtované.
  */
-export async function zaplacenoOsobami(db: D1Database): Promise<Map<number, number>> {
-  const [zBanky, zKapsy] = await Promise.all([
-    db
-      .prepare(
-        'select member_id, sum(castka) as soucet from payments where member_id is not null and castka > 0 group by member_id',
-      )
-      .all<{ member_id: number; soucet: number }>(),
-    db
-      .prepare(
-        `select hradi_member_id as member_id, sum(castka_celkem) as soucet from cost_items
-          where aktivni = 1 and zdroj_uhrady = 'osoba' and hradi_member_id is not null
-          group by hradi_member_id`,
-      )
-      .all<{ member_id: number; soucet: number }>(),
-  ]);
+export async function zaplacenoOsobami(
+  db: D1Database,
+  prehled: Prehled,
+  odMesice: string,
+  doMesice: string = mesicNyni(),
+): Promise<Map<number, number>> {
+  // 'YYYY-MM-31' je bezpečná horní mez: řetězcově je >= každý skutečný den
+  // toho měsíce a < prvního dne měsíce dalšího.
+  const zBanky = await db
+    .prepare(
+      `select member_id, sum(castka) as soucet from payments
+        where member_id is not null and castka > 0 and datum >= ? and datum <= ?
+        group by member_id`,
+    )
+    .bind(`${odMesice}-01`, `${doMesice}-31`)
+    .all<{ member_id: number; soucet: number }>();
 
   const soucty = new Map<number, number>();
-  for (const r of [...zBanky.results, ...zKapsy.results]) {
-    soucty.set(r.member_id, (soucty.get(r.member_id) ?? 0) + r.soucet);
+  for (const r of zBanky.results) soucty.set(r.member_id, (soucty.get(r.member_id) ?? 0) + r.soucet);
+  for (const [id, castka] of vlozenoZeSveho(prehled, odMesice, doMesice)) {
+    soucty.set(id, (soucty.get(id) ?? 0) + castka);
   }
   return soucty;
 }
@@ -317,6 +324,205 @@ export async function zrusUzaverku(db: D1Database, obdobi: string, kdo: string):
       obdobi,
       `Zrušena uzávěrka měsíce ${obdobi} — měsíc se zase počítá z aktuálního nastavení`,
       { obdobi },
+      null,
+    ),
+  ]);
+}
+
+/* ---------- roční vyúčtování ---------- */
+
+export type ZpusobVyrovnani = 'do_zalohy' | 'jednorazove';
+
+export interface RadekVyuctovaniDb {
+  member_id: number;
+  predepsano: number;
+  zaplaceno: number;
+  skutecne: number;
+  /** skutecne − zaplaceno; kladné = má doplatit */
+  rozdil: number;
+  zpusob: ZpusobVyrovnani;
+  nova_zaloha: number;
+  /** co zůstalo mimo zálohu; + = má doplatit, − = má k dobru */
+  zustatek: number;
+}
+
+export interface Vyuctovani {
+  obdobi_od: string;
+  obdobi_do: string;
+  vytvoreno_at: string;
+  vytvoril: string | null;
+  radky: RadekVyuctovaniDb[];
+}
+
+/** Vyúčtování od nejnovějšího. */
+export async function nactiVyuctovani(db: D1Database): Promise<Vyuctovani[]> {
+  const [hlavicky, radky] = await Promise.all([
+    db
+      .prepare('select obdobi_od, obdobi_do, vytvoreno_at, vytvoril from vyuctovani order by obdobi_do desc')
+      .all<{ obdobi_od: string; obdobi_do: string; vytvoreno_at: string; vytvoril: string | null }>(),
+    db
+      .prepare(
+        `select obdobi_do, member_id, predepsano, zaplaceno, skutecne, rozdil, zpusob, nova_zaloha, zustatek
+           from vyuctovani_radky`,
+      )
+      .all<RadekVyuctovaniDb & { obdobi_do: string }>(),
+  ]);
+
+  const podleObdobi = new Map<string, Vyuctovani>();
+  const seznam = hlavicky.results.map((h): Vyuctovani => {
+    const v: Vyuctovani = { ...h, radky: [] };
+    podleObdobi.set(h.obdobi_do, v);
+    return v;
+  });
+  for (const r of radky.results) {
+    const { obdobi_do, ...zbytek } = r;
+    podleObdobi.get(obdobi_do)?.radky.push(zbytek);
+  }
+  return seznam;
+}
+
+/** Kolik komu po vyúčtováních zbývá mimo zálohu. + = má doplatit, − = má k dobru. */
+export function zustatkyZVyuctovani(vyuctovani: Vyuctovani[]): Map<number, number> {
+  const mapa = new Map<number, number>();
+  for (const v of vyuctovani) {
+    for (const r of v.radky) {
+      if (r.zustatek !== 0) mapa.set(r.member_id, (mapa.get(r.member_id) ?? 0) + r.zustatek);
+    }
+  }
+  return mapa;
+}
+
+export interface VstupVyuctovani {
+  obdobi_od: string;
+  obdobi_do: string;
+  radky: RadekVyuctovaniDb[];
+  /** komu vyúčtování stanoví novou zálohu — jen tomu, od koho příspěvky chodí */
+  zalohy: { member_id: number; castka: number }[];
+}
+
+/**
+ * Uzavře období: zamrazí čísla, stanoví nové zálohy a **posune počátek
+ * sledování** za konec období. Všechno jednou dávkou — kdyby se posun
+ * nastavení neuložil, počítal by se dluh za už vyúčtované měsíce znovu.
+ */
+export async function ulozVyuctovani(
+  db: D1Database,
+  vstup: VstupVyuctovani,
+  kdo: string,
+): Promise<void> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(vstup.obdobi_od) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(vstup.obdobi_do)) {
+    throw new ChybaVstupu('Období čekám ve tvaru RRRR-MM.');
+  }
+  if (vstup.obdobi_do < vstup.obdobi_od) throw new ChybaVstupu('Konec období je před jeho začátkem.');
+
+  const hotove = await db
+    .prepare('select obdobi_do from vyuctovani where obdobi_do >= ? order by obdobi_do limit 1')
+    .bind(vstup.obdobi_od)
+    .first<{ obdobi_do: string }>();
+  if (hotove !== null) {
+    throw new ChybaVstupu(`Období do ${hotove.obdobi_do} už vyúčtované je — nejdřív ho zruš.`);
+  }
+
+  // Následující měsíc: od něj platí nové zálohy a od něj se počítá další období.
+  const dalsi = posunMesic(vstup.obdobi_do, 1);
+
+  const davka = [
+    db
+      .prepare('insert into vyuctovani (obdobi_do, obdobi_od, vytvoril) values (?, ?, ?)')
+      .bind(vstup.obdobi_do, vstup.obdobi_od, kdo),
+  ];
+  for (const r of vstup.radky) {
+    davka.push(
+      db
+        .prepare(
+          `insert into vyuctovani_radky
+             (obdobi_do, member_id, predepsano, zaplaceno, skutecne, rozdil, zpusob, nova_zaloha, zustatek)
+           values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          vstup.obdobi_do,
+          r.member_id,
+          r.predepsano,
+          r.zaplaceno,
+          r.skutecne,
+          r.rozdil,
+          r.zpusob,
+          r.nova_zaloha,
+          r.zustatek,
+        ),
+    );
+  }
+  for (const z of vstup.zalohy) {
+    davka.push(
+      db
+        .prepare(
+          `insert into zalohy (member_id, castka, plati_od, poznamka, created_by)
+           values (?, ?, ?, ?, ?)
+           on conflict(member_id, plati_od) do update set castka = excluded.castka,
+                poznamka = excluded.poznamka, created_by = excluded.created_by,
+                created_at = datetime('now')`,
+        )
+        .bind(z.member_id, z.castka, dalsi, `z vyúčtování ${vstup.obdobi_od} – ${vstup.obdobi_do}`, kdo),
+    );
+  }
+
+  davka.push(
+    db
+      .prepare(
+        `insert into settings (klic, hodnota, changed_at, changed_by) values ('vyuctovani_od', ?, datetime('now'), ?)
+         on conflict(klic) do update set hodnota = excluded.hodnota,
+              changed_at = excluded.changed_at, changed_by = excluded.changed_by`,
+      )
+      .bind(dalsi, kdo),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'vyuctovani',
+      vstup.obdobi_do,
+      `Vyúčtováno období ${vstup.obdobi_od} – ${vstup.obdobi_do}; nové zálohy platí od ${dalsi}`,
+      null,
+      vstup,
+    ),
+  );
+
+  await db.batch(davka);
+}
+
+/**
+ * Zruší vyúčtování a vrátí počátek sledování na začátek jeho období.
+ *
+ * Zrušit jde jen to poslední — starší by se nedalo vrátit, aniž by se
+ * novější počítalo dvakrát. **Zálohy, které vyúčtování stanovilo, zůstávají**;
+ * jsou to historická data a mění se na stránce Vyrovnání.
+ */
+export async function zrusVyuctovani(db: D1Database, obdobi_do: string, kdo: string): Promise<void> {
+  const posledni = await db
+    .prepare('select obdobi_od, obdobi_do from vyuctovani order by obdobi_do desc limit 1')
+    .first<{ obdobi_od: string; obdobi_do: string }>();
+  if (posledni === null) throw new ChybaVstupu('Žádné vyúčtování tu není.');
+  if (posledni.obdobi_do !== obdobi_do) {
+    throw new ChybaVstupu(`Zrušit jde jen poslední vyúčtování (do ${posledni.obdobi_do}).`);
+  }
+
+  await db.batch([
+    db.prepare('delete from vyuctovani_radky where obdobi_do = ?').bind(obdobi_do),
+    db.prepare('delete from vyuctovani where obdobi_do = ?').bind(obdobi_do),
+    db
+      .prepare(
+        `insert into settings (klic, hodnota, changed_at, changed_by) values ('vyuctovani_od', ?, datetime('now'), ?)
+         on conflict(klic) do update set hodnota = excluded.hodnota,
+              changed_at = excluded.changed_at, changed_by = excluded.changed_by`,
+      )
+      .bind(posledni.obdobi_od, kdo),
+    auditStatement(
+      db,
+      kdo,
+      'smazani',
+      'vyuctovani',
+      obdobi_do,
+      `Zrušeno vyúčtování ${posledni.obdobi_od} – ${obdobi_do}; sledování se vrátilo na ${posledni.obdobi_od}. Zálohy z něj zůstávají v platnosti.`,
+      posledni,
       null,
     ),
   ]);

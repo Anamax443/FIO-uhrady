@@ -39,17 +39,28 @@ import {
   ulozOsobu,
   nactiBehy,
   nactiUzaverky,
+  nactiVyuctovani,
   nactiZalohy,
   osobaPodleTokenu,
   platbyOsoby,
   vytvorOdkaz,
   zrusOdkaz,
   ulozUzaverku,
+  ulozVyuctovani,
   ulozZalohu,
   zrusUzaverku,
+  zrusVyuctovani,
   zaplacenoOsobami,
+  zustatkyZVyuctovani,
+  type ZpusobVyrovnani,
 } from './db.js';
 import { podkladUzaverky, renderUzaverky } from './closings-page.js';
+import {
+  podkladVyuctovani,
+  radkyKUlozeni,
+  renderVyuctovani,
+  vyuctovatelneMesice,
+} from './settlement-page.js';
 import { renderDokumentace } from './docs-page.js';
 import { renderClen } from './member-page.js';
 import {
@@ -186,6 +197,33 @@ function exportCsv(polozky: Awaited<ReturnType<typeof nactiPrehled>>): Response 
       'cache-control': 'no-store',
     },
   });
+}
+
+/**
+ * Načte všechno, z čeho se počítá vyrovnání i vyúčtování.
+ *
+ * Platby se berou **za běžící období** — od počátku sledování, který se po
+ * každém vyúčtování posune. Bez toho by se jednou zúčtované peníze odečítaly
+ * od dluhu i v dalším období.
+ */
+async function stavVyrovnani(db: D1Database) {
+  const [prehled, nastaveni, zalohy, uzaverky, hotovaVyuctovani] = await Promise.all([
+    nactiPrehled(db),
+    nactiNastaveni(db),
+    nactiZalohy(db),
+    nactiUzaverky(db),
+    nactiVyuctovani(db),
+  ]);
+  const zaplaceno = await zaplacenoOsobami(db, prehled, nastaveni.vyuctovani_od);
+  return {
+    prehled,
+    nastaveni,
+    zalohy,
+    uzaverky,
+    hotovaVyuctovani,
+    zaplaceno,
+    zustatky: zustatkyZVyuctovani(hotovaVyuctovani),
+  };
 }
 
 async function telo(request: Request): Promise<unknown> {
@@ -331,22 +369,16 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/prehled') {
-          const [prehled, zaplaceno, nastaveni, beh, platby, zalohy, uzaverky] = await Promise.all([
-            nactiPrehled(env.DB),
-            zaplacenoOsobami(env.DB),
-            nactiNastaveni(env.DB),
-            posledniBeh(env.DB),
-            nactiPlatby(env.DB, 500),
-            nactiZalohy(env.DB),
-            nactiUzaverky(env.DB),
-          ]);
+          const stav = await stavVyrovnani(env.DB);
+          const [beh, platby] = await Promise.all([posledniBeh(env.DB), nactiPlatby(env.DB, 500)]);
           return html(
             renderPrehled(
-              prehled,
-              zaplaceno,
-              zalohy,
-              nastaveni,
-              uzaverky,
+              stav.prehled,
+              stav.zaplaceno,
+              stav.zalohy,
+              stav.nastaveni,
+              stav.uzaverky,
+              stav.zustatky,
               beh,
               platby.filter((p) => p.member_id === null).length,
               kdo,
@@ -364,15 +396,18 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/vyrovnani') {
-          const [prehled, zaplaceno, nastaveni, zalohy, uzaverky] = await Promise.all([
-            nactiPrehled(env.DB),
-            zaplacenoOsobami(env.DB),
-            nactiNastaveni(env.DB),
-            nactiZalohy(env.DB),
-            nactiUzaverky(env.DB),
-          ]);
+          const s = await stavVyrovnani(env.DB);
           return html(
-            renderVyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky, kdo, env.GIT_COMMIT ?? 'dev'),
+            renderVyrovnani(
+              s.prehled,
+              s.zaplaceno,
+              s.zalohy,
+              s.nastaveni,
+              s.uzaverky,
+              s.zustatky,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+            ),
           );
         }
 
@@ -382,17 +417,101 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/uzaverky') {
-          const [prehled, zalohy, uzaverky, nastaveni, zaplaceno] = await Promise.all([
-            nactiPrehled(env.DB),
-            nactiZalohy(env.DB),
-            nactiUzaverky(env.DB),
-            nactiNastaveni(env.DB),
-            zaplacenoOsobami(env.DB),
-          ]);
-          const { mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
-          return html(
-            renderUzaverky(prehled, zalohy, uzaverky, nastaveni, mesicu, kdo, env.GIT_COMMIT ?? 'dev'),
+          const s = await stavVyrovnani(env.DB);
+          const { mesicu } = vyrovnani(
+            s.prehled,
+            s.zaplaceno,
+            s.zalohy,
+            s.nastaveni,
+            s.uzaverky,
+            s.zustatky,
           );
+          return html(
+            renderUzaverky(s.prehled, s.zalohy, s.uzaverky, s.nastaveni, mesicu, kdo, env.GIT_COMMIT ?? 'dev'),
+          );
+        }
+
+        if (request.method === 'GET' && path === '/admin/vyuctovani') {
+          const s = await stavVyrovnani(env.DB);
+          const mozna = vyuctovatelneMesice(s.nastaveni, s.uzaverky);
+          const zadano = url.searchParams.get('do');
+          // Vybrat jde jen měsíc, který opravdu jde vyúčtovat; jinak poslední z nich.
+          const konec =
+            zadano !== null && mozna.includes(zadano)
+              ? zadano
+              : (mozna[mozna.length - 1] ?? s.nastaveni.vyuctovani_od);
+          // Platby za vyúčtovávané období, ne za celé sledování — jinak by se do
+          // vyúčtování dostaly i peníze, které přišly až po jeho konci.
+          const zaplacenoVObdobi = await zaplacenoOsobami(
+            env.DB,
+            s.prehled,
+            s.nastaveni.vyuctovani_od,
+            konec,
+          );
+          return html(
+            renderVyuctovani(
+              podkladVyuctovani(s.prehled, s.zalohy, s.uzaverky, s.nastaveni, zaplacenoVObdobi, konec),
+              s.hotovaVyuctovani,
+              s.nastaveni,
+              s.prehled.nazev_domu,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+            ),
+          );
+        }
+
+        if (request.method === 'POST' && path === '/api/vyuctovani') {
+          const d = (await telo(request)) as {
+            do?: string;
+            rozhodnuti?: { member_id: number; zpusob: string; nova_zaloha: string }[];
+          };
+          const konec = String(d.do ?? '').trim();
+          const s = await stavVyrovnani(env.DB);
+          if (!vyuctovatelneMesice(s.nastaveni, s.uzaverky).includes(konec)) {
+            throw new ChybaVstupu(
+              `Měsíc ${konec} vyúčtovat nejde — musí být uzavřený a navazovat na ${s.nastaveni.vyuctovani_od}.`,
+            );
+          }
+
+          // Z prohlížeče se berou jen rozhodnutí, čísla se počítají znovu tady.
+          const rozhodnuti = new Map<number, { zpusob: ZpusobVyrovnani; nova_zaloha: number }>();
+          for (const r of d.rozhodnuti ?? []) {
+            const korun = Number(String(r.nova_zaloha ?? '').replace(/\s/g, '').replace(',', '.'));
+            if (!Number.isFinite(korun) || korun < 0) {
+              throw new ChybaVstupu('Nová záloha musí být nezáporné číslo.');
+            }
+            rozhodnuti.set(Number(r.member_id), {
+              zpusob: r.zpusob === 'jednorazove' ? 'jednorazove' : 'do_zalohy',
+              nova_zaloha: Math.round(korun * 100),
+            });
+          }
+
+          const zaplacenoVObdobi = await zaplacenoOsobami(
+            env.DB,
+            s.prehled,
+            s.nastaveni.vyuctovani_od,
+            konec,
+          );
+          const podklad = podkladVyuctovani(
+            s.prehled,
+            s.zalohy,
+            s.uzaverky,
+            s.nastaveni,
+            zaplacenoVObdobi,
+            konec,
+          );
+          await ulozVyuctovani(
+            env.DB,
+            { obdobi_od: podklad.od, obdobi_do: podklad.do, ...radkyKUlozeni(podklad, rozhodnuti) },
+            kdo,
+          );
+          return json({ ok: true, od: podklad.od, do: podklad.do, dalsi: podklad.dalsi });
+        }
+
+        if (request.method === 'POST' && path === '/api/vyuctovani/zrusit') {
+          const d = (await telo(request)) as { do?: string };
+          await zrusVyuctovani(env.DB, String(d.do ?? '').trim(), kdo);
+          return json({ ok: true });
         }
 
         if (request.method === 'POST' && path === '/api/uzaverka') {
@@ -603,16 +722,18 @@ export default {
         );
       }
 
-      const [prehled, zaplaceno, zalohy, uzaverky, nastaveni, platby] = await Promise.all([
-        nactiPrehled(env.DB),
-        zaplacenoOsobami(env.DB),
-        nactiZalohy(env.DB),
-        nactiUzaverky(env.DB),
-        nactiNastaveni(env.DB),
-        platbyOsoby(env.DB, osoba.id),
-      ]);
+      const s = await stavVyrovnani(env.DB);
+      const { prehled, nastaveni, uzaverky } = s;
+      const platby = await platbyOsoby(env.DB, osoba.id);
 
-      const { radky } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
+      const { radky } = vyrovnani(
+        prehled,
+        s.zaplaceno,
+        s.zalohy,
+        nastaveni,
+        uzaverky,
+        s.zustatky,
+      );
       // Nezletilé dítě nemá vlastní řádek — ukáže se ten, kdo za něj závazek nese.
       const muj =
         radky.find((r) => r.osoba.id === osoba.id) ??

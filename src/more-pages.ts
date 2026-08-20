@@ -24,6 +24,8 @@ export interface RadekVyrovnani {
   /** skutečný podíl na nákladech za tytéž měsíce */
   skutecne: number;
   zaplaceno: number;
+  /** co zbylo z minulého vyúčtování mimo zálohu; + = doplatit, − = má k dobru */
+  zustatek: number;
   /** kladné = zbývá doplatit, záporné = přeplatek */
   rozdil: number;
   zastupuje: string[];
@@ -68,6 +70,8 @@ export function vyrovnani(
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
   uzaverky: Map<string, Uzaverka> = new Map(),
+  /** zbytky z vyúčtování, které se nerozpustily do zálohy */
+  zustatky: Map<number, number> = new Map(),
   ted = new Date(),
 ): { radky: RadekVyrovnani[]; mesicu: number; otevrenych: number } {
   const odMesice = nastaveni.vyuctovani_od;
@@ -122,10 +126,15 @@ export function vyrovnani(
     .map((osoba): RadekVyrovnani => {
       const mesicne = sectiSDetmi(osoba, tedSouhrn.mesicneOsoba);
       const jednorazove = sectiSDetmi(osoba, tedSouhrn.saldoOsoba);
-      const zaloha = zalohaVMesici(zalohy, osoba.id, tentoMesic);
+      // Hned po vyúčtování začíná období až příštím měsícem — ukázat zálohu,
+      // která doběhla, by na stránce o novém období jen mátlo.
+      const zaloha = zalohaVMesici(zalohy, osoba.id, odMesice > tentoMesic ? odMesice : tentoMesic);
       const predepsano = predepsanoZaOsobu.get(osoba.id) ?? 0;
-      const uhrazeno = zaplaceno.get(osoba.id) ?? 0;
+      const uhrazeno = sectiSDetmi(osoba, zaplaceno);
       const rocni = odhadRoku.get(osoba.id) ?? 0;
+      // Co z minulého vyúčtování nešlo do zálohy, se doplácí zvlášť — je to
+      // předepsané stejně jako záloha, jen jednorázově.
+      const zustatek = zustatky.get(osoba.id) ?? 0;
 
       return {
         osoba,
@@ -135,7 +144,8 @@ export function vyrovnani(
         navrh: nahoruNaStovky(Math.round((rocni / 12) * (1 + nastaveni.rezerva_procent / 100))),
         predepsano,
         zaplaceno: uhrazeno,
-        rozdil: predepsano - uhrazeno,
+        zustatek,
+        rozdil: predepsano + zustatek - uhrazeno,
         skutecne: skutecneZaOsobu.get(osoba.id) ?? 0,
         sledovat: Boolean(osoba.je_platce),
         zastupuje: prehled.osoby
@@ -170,13 +180,14 @@ export function renderPrehled(
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
   uzaverky: Map<string, Uzaverka>,
+  zustatky: Map<number, number>,
   beh: Beh | null,
   nepriraze: number,
   kdo: string,
   commit: string,
 ): string {
   const s = spocitej(prehled);
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky, zustatky);
   const odMesice = nastaveni.vyuctovani_od;
   // Dluh se sčítá jen u těch, od koho příspěvky na účet opravdu chodí.
   const dluzi = radky.filter((r) => r.sledovat).reduce((a, r) => a + Math.max(0, r.rozdil), 0);
@@ -387,10 +398,18 @@ export function renderVyrovnani(
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
   uzaverky: Map<string, Uzaverka>,
+  zustatky: Map<number, number>,
   kdo: string,
   commit: string,
 ): string {
-  const { radky, mesicu, otevrenych } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
+  const { radky, mesicu, otevrenych } = vyrovnani(
+    prehled,
+    zaplaceno,
+    zalohy,
+    nastaveni,
+    uzaverky,
+    zustatky,
+  );
   const odMesice = nastaveni.vyuctovani_od;
 
   const blok = (r: RadekVyrovnani): string => {
@@ -413,6 +432,13 @@ export function renderVyrovnani(
         <span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
         <span>Ročně</span><span>${formatKc(r.mesicne * 12)}</span>
         ${r.zaplaceno !== 0 ? `<span>Zaplatil${r.osoba.jmeno.endsWith('a') ? 'a' : ''} ze svého</span><span>${formatKc(r.zaplaceno)}</span>` : ''}
+        ${
+          r.zustatek < 0
+            ? `<span class="preplatek">Z vyúčtování má k dobru</span><span class="preplatek">${formatKc(-r.zustatek)}</span>`
+            : r.zustatek > 0
+              ? `<span class="zbyva">Z vyúčtování má doplatit</span><span class="zbyva">${formatKc(r.zustatek)}</span>`
+              : ''
+        }
       </div>
     </section>`;
     }
@@ -425,6 +451,11 @@ export function renderVyrovnani(
       <div class="vypocet">
         <span>Záloha na trvalý příkaz</span><span>${r.zaloha === 0 ? 'nestanovena' : formatKc(r.zaloha) + ' / měs'}</span>
         <span>Předepsáno za ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}</span><span>${formatKc(r.predepsano)}</span>
+        ${
+          r.zustatek !== 0
+            ? `<span>${r.zustatek > 0 ? 'Doplatek z vyúčtování' : 'K dobru z vyúčtování'}</span><span>${formatKcZnamenko(r.zustatek)}</span>`
+            : ''
+        }
         <span>Přišlo na účet (i placené ze svého)</span><span>${formatKc(r.zaplaceno)}</span>
         <span class="vysledek">${r.rozdil >= 0 ? 'Zbývá doplatit' : 'Předplaceno'}</span><span class="vysledek">${formatKc(Math.abs(r.rozdil))}</span>
 
@@ -433,8 +464,8 @@ export function renderVyrovnani(
         <span>Rozdíl proti zaplacenému</span><span>${formatKcZnamenko(r.zaplaceno - r.skutecne)}</span>
         <span class="note">${
           r.zaplaceno - r.skutecne >= 0
-            ? 'přeplatek se vrátí ve vyúčtování — sníží příští zálohu'
-            : 'nedoplatek se ve vyúčtování rozpustí do příští zálohy'
+            ? 'přeplatek se vrátí ve <a href="/admin/vyuctovani">vyúčtování</a> — sníží příští zálohu'
+            : 'nedoplatek se ve <a href="/admin/vyuctovani">vyúčtování</a> rozpustí do příští zálohy'
         }</span><span></span>
       </div>
       <div class="zaloha-radek">
@@ -477,7 +508,8 @@ export function renderVyrovnani(
         <span>· splatnost <b>${nastaveni.den_splatnosti}.</b> dne</span>
         <span>· příští úhrada <b>${datumCesky(dalsiSplatnost(nastaveni.den_splatnosti))}</b></span>
         <span>· po splatnosti <b>${mesicu}</b></span>
-        <a class="btn" href="/admin/nastaveni">Změnit v Nastavení</a>
+        <a class="btn" href="/admin/nastaveni" title="Počátek sledování, den splatnosti a rezerva v záloze">Změnit v Nastavení</a>
+        <a class="btn" href="/admin/vyuctovani" title="Srovnat zálohy se skutečnými náklady za uzavřené období">Vyúčtovat období</a>
       </div>
       ${bloky || '<p class="vysvetleni">Zatím tu není nikdo, komu by se dal spočítat podíl.</p>'}
     </div>

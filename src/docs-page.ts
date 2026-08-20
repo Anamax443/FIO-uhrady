@@ -199,11 +199,8 @@ const KAPITOLY: Kapitola[] = [
         Vedle záloh se sčítají <b>skutečné náklady</b>. Rozdíl mezi zaplaceným a skutečností
         je přeplatek nebo nedoplatek — ten se při vyúčtování <b>rozpustí do nové zálohy</b>,
         takže trvalý příkaz se přepíše jednou za období a zase je klid.
-      </p>
-      <div class="varovani">
-        Starší měsíce se zatím počítají <b>dnešními</b> částkami. Přesnější výpočet podle
-        historie přijde s měsíčními uzávěrkami, které zamrazí, co v daném měsíci platilo.
-      </div>`,
+        Podrobně v kapitole <a href="#vyuctovani">Vyúčtování období</a>.
+      </p>`,
   },
   {
     id: 'uzaverky',
@@ -225,7 +222,52 @@ const KAPITOLY: Kapitola[] = [
             nastavení. Uzavření i zrušení se zapisuje do historie se jménem a časem.</li>
         <li>Ve Vyrovnání je vidět, kolik měsíců ještě uzavřených není.</li>
       </ul>`,
-  },  {
+  },
+  {
+    id: 'vyuctovani',
+    nadpis: 'Vyúčtování období',
+    telo: `
+      <p>
+        Záloha je schválně <b>fixní</b>, aby trvalý příkaz nemusel nikdo měnit každý měsíc.
+        Skutečné náklady ale kolísají, takže se rozdíl někde nasčítá. Vyúčtování ho jednou
+        za období srovná — stejně jako u energií.
+      </p>
+      <p>
+        <code>rozdíl = skutečný podíl na nákladech − co za období přišlo</code>
+      </p>
+      <p>Za období se sčítají <b>zamražená čísla z uzávěrek</b>, proto jde vyúčtovat jen
+        uzavřené a navazující měsíce. Otevřený měsíc se pořád počítá z dnešního nastavení
+        a vyúčtované číslo by se pak mohlo zpětně změnit.</p>
+      <h3>Co se s rozdílem stane</h3>
+      <ul>
+        <li><b>Rozpustit do zálohy</b> — rozdíl se rozloží do dvanácti měsíců a přičte
+            k nové záloze. Trvalý příkaz zůstane fixní, jen se jednou přepíše.</li>
+        <li><b>Doplatit jednorázově</b> — rozdíl zůstane stát jako částka k doplacení
+            (nebo k vrácení) a ve Vyrovnání se ukazuje zvlášť, mimo zálohu.</li>
+      </ul>
+      <p>
+        Nedoplatek nad <b>práh z Nastavení</b> appka sama rozpustit nenavrhne — zvedl by
+        zálohu příliš, tak se radši zeptá. Poslední slovo má stejně admin: částku zálohy
+        jde přepsat ručně.
+      </p>
+      <h3>Období na sebe navazují</h3>
+      <p>
+        Uložením vyúčtování se <b>počátek sledování posune</b> za konec období a nové zálohy
+        začnou platit od následujícího měsíce. Co se jednou zúčtovalo, se v dalším období
+        už nepočítá — jinak by se stejný přeplatek odečítal od dluhu donekonečna.
+      </p>
+      <p>
+        Zrušit jde jen <b>poslední</b> vyúčtování; sledování se vrátí na začátek jeho období.
+        Zálohy, které stanovilo, přitom zůstávají v platnosti — jsou to historická data
+        a mění se ve Vyrovnání.
+      </p>
+      <div class="varovani">
+        Platba za prosinec, která přijde až v lednu, spadne do <b>dalšího</b> období.
+        Vyúčtování ji ukáže jako nedoplatek a v novém období se objeví jako předplacené —
+        vyrovná se to samo, jen to na přelomu období vypadá rozhozeně.
+      </div>`,
+  },
+  {
     id: 'odkaz',
     nadpis: 'Osobní přehled pro člena',
     telo: `

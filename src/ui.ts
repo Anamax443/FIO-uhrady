@@ -230,7 +230,7 @@ export const SYMBOLY = `
 </defs></svg>`;
 
 type Stranka =
-  | 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'uzaverky'
+  | 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'uzaverky' | 'vyuctovani'
   | 'nastaveni' | 'log' | 'dokumentace' | 'oapp';
 
 interface Polozka {
@@ -247,6 +247,7 @@ const MENU: Polozka[] = [
   { klic: 'uhrady', href: '/admin/uhrady', ikona: 'i-bank', popis: 'Úhrady z Fio' },
   { klic: 'vyrovnani', href: '/admin/vyrovnani', ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
   { klic: 'uzaverky', href: '/admin/uzaverky', ikona: 'i-lock', popis: 'Uzávěrky' },
+  { klic: 'vyuctovani', href: '/admin/vyuctovani', ikona: 'i-doc', popis: 'Vyúčtování' },
 ];
 
 const MENU_SPRAVA: Polozka[] = [
