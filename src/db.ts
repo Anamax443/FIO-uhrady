@@ -322,6 +322,84 @@ export async function zrusUzaverku(db: D1Database, obdobi: string, kdo: string):
   ]);
 }
 
+/**
+ * Osobní odkaz na přehled. Token je náhodný a neuhodnutelný — kdo ho má,
+ * vidí svoje čísla a souhrn za dům, nic o ostatních.
+ */
+export async function vytvorOdkaz(db: D1Database, member_id: number, kdo: string): Promise<string> {
+  const osoba = await db
+    .prepare('select jmeno, view_token from members where id = ?')
+    .bind(member_id)
+    .first<{ jmeno: string; view_token: string | null }>();
+  if (osoba === null) throw new ChybaVstupu('Osoba neexistuje.');
+  if (osoba.view_token) return osoba.view_token;
+
+  const token = [...crypto.getRandomValues(new Uint8Array(16))]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  await db.batch([
+    db.prepare('update members set view_token = ? where id = ?').bind(token, member_id),
+    auditStatement(
+      db,
+      kdo,
+      'vytvoreni',
+      'odkaz',
+      String(member_id),
+      `Vytvořen osobní odkaz pro ${osoba.jmeno}`,
+      null,
+      null,
+    ),
+  ]);
+  return token;
+}
+
+/** Zneplatní odkaz — třeba když se dostane, kam neměl. */
+export async function zrusOdkaz(db: D1Database, member_id: number, kdo: string): Promise<void> {
+  const osoba = await db
+    .prepare('select jmeno from members where id = ?')
+    .bind(member_id)
+    .first<{ jmeno: string }>();
+  if (osoba === null) throw new ChybaVstupu('Osoba neexistuje.');
+
+  await db.batch([
+    db.prepare('update members set view_token = null where id = ?').bind(member_id),
+    auditStatement(
+      db,
+      kdo,
+      'smazani',
+      'odkaz',
+      String(member_id),
+      `Zrušen osobní odkaz pro ${osoba.jmeno} — starý odkaz přestal platit`,
+      null,
+      null,
+    ),
+  ]);
+}
+
+export async function osobaPodleTokenu(db: D1Database, token: string): Promise<Osoba | null> {
+  if (!/^[0-9a-f]{32}$/.test(token)) return null;
+  return await db
+    .prepare(
+      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token
+         from members where view_token = ? and aktivni = 1`,
+    )
+    .bind(token)
+    .first<Osoba>();
+}
+
+/** Platby jedné osoby — pro její osobní přehled. */
+export async function platbyOsoby(db: D1Database, member_id: number, limit = 50) {
+  const { results } = await db
+    .prepare(
+      `select datum, castka, matched_by from payments
+        where member_id = ? and castka > 0 order by datum desc limit ?`,
+    )
+    .bind(member_id, limit)
+    .all<{ datum: string; castka: number; matched_by: string | null }>();
+  return results;
+}
+
 export async function nactiBehy(db: D1Database, limit = 50): Promise<Beh[]> {
   const { results } = await db
     .prepare(

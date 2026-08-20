@@ -34,6 +34,8 @@ export interface Osoba {
   /** kdo smí do správy a komu chodí souhrn za všechny */
   je_admin?: number;
   aktivni?: number;
+  /** osobní odkaz na přehled; null = nevytvořený */
+  view_token?: string | null;
 }
 
 export interface Polozka {

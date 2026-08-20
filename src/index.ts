@@ -40,6 +40,10 @@ import {
   nactiBehy,
   nactiUzaverky,
   nactiZalohy,
+  osobaPodleTokenu,
+  platbyOsoby,
+  vytvorOdkaz,
+  zrusOdkaz,
   ulozUzaverku,
   ulozZalohu,
   zrusUzaverku,
@@ -47,7 +51,17 @@ import {
 } from './db.js';
 import { podkladUzaverky, renderUzaverky } from './closings-page.js';
 import { renderDokumentace } from './docs-page.js';
-import { renderLog, renderOApp, renderOsoby, renderPrehled, renderVyrovnani, vyrovnani } from './more-pages.js';
+import { renderClen } from './member-page.js';
+import {
+  dalsiSplatnost,
+  renderLog,
+  renderOApp,
+  renderOsoby,
+  renderPrehled,
+  renderVyrovnani,
+  vyrovnani,
+  vyvojPodilu,
+} from './more-pages.js';
 import { mesicNyni, popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
@@ -443,6 +457,18 @@ export default {
           return json({ ok: true, id });
         }
 
+        if (request.method === 'POST' && path === '/api/odkaz') {
+          const d = (await telo(request)) as { member_id?: number };
+          const token = await vytvorOdkaz(env.DB, Number(d.member_id), kdo);
+          return json({ ok: true, odkaz: `/v/${token}` });
+        }
+
+        if (request.method === 'POST' && path === '/api/odkaz/zrusit') {
+          const d = (await telo(request)) as { member_id?: number };
+          await zrusOdkaz(env.DB, Number(d.member_id), kdo);
+          return json({ ok: true });
+        }
+
         if (request.method === 'POST' && path === '/api/zaloha') {
           const d = (await telo(request)) as { member_id?: number; castka?: string; plati_od?: string };
           const korun = Number(String(d.castka ?? '').replace(/\s/g, '').replace(',', '.'));
@@ -561,8 +587,55 @@ export default {
       return notBuilt(path);
     }
 
-    // Přehled na neuhodnutelném odkazu — jen čtení + export.
-    if (path.startsWith('/v/')) return notBuilt('přehled');
+    // Osobní přehled na neuhodnutelném odkazu — veřejný, jen ke čtení.
+    // Kdo odkaz nemá, sem nemá jak trefit; kdo ho má, vidí jen svoje čísla.
+    if (path.startsWith('/v/')) {
+      const osoba = await osobaPodleTokenu(env.DB, path.slice(3));
+      if (osoba === null) {
+        return html(
+          `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" /><title>Odkaz neplatí</title></head>
+<body style="font:16px/1.6 system-ui;max-width:30rem;margin:14vh auto;padding:0 1.25rem">
+<h1 style="font-size:1.3rem">Tenhle odkaz už neplatí</h1>
+<p>Buď byl zrušený, nebo je špatně opsaný. Požádej o nový toho, kdo ti ho poslal.</p>
+</body></html>`,
+          404,
+        );
+      }
+
+      const [prehled, zaplaceno, zalohy, uzaverky, nastaveni, platby] = await Promise.all([
+        nactiPrehled(env.DB),
+        zaplacenoOsobami(env.DB),
+        nactiZalohy(env.DB),
+        nactiUzaverky(env.DB),
+        nactiNastaveni(env.DB),
+        platbyOsoby(env.DB, osoba.id),
+      ]);
+
+      const { radky } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
+      // Nezletilé dítě nemá vlastní řádek — ukáže se ten, kdo za něj závazek nese.
+      const muj =
+        radky.find((r) => r.osoba.id === osoba.id) ??
+        radky.find((r) => r.zastupuje.includes(osoba.jmeno));
+      if (muj === undefined) return notBuilt('přehled: osoba nemá spočítaný podíl');
+
+      const iban = await env.DB.prepare("select hodnota from settings where klic = 'iban_domu'")
+        .first<{ hodnota: string }>();
+
+      return html(
+        renderClen(
+          osoba,
+          muj,
+          vyvojPodilu(prehled, uzaverky, nastaveni, muj.osoba.id),
+          platby,
+          prehled,
+          nastaveni,
+          iban?.hodnota ?? null,
+          dalsiSplatnost(nastaveni.den_splatnosti),
+          env.GIT_COMMIT ?? 'dev',
+        ),
+      );
+    }
 
     if (path === '/') {
       // Stav databáze se ověří dotazem, ne odhadem — návštěvník má vidět pravdu.

@@ -32,6 +32,8 @@ const STYL = `
 .radek .stav.chyba { color: var(--crit); }
 .radek[data-platce="false"] input[type="text"] { visibility: hidden; }
 .platce { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
+.odkaz { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 2px 0 6px; }
+.odkaz input { flex: 1; min-width: 220px; }
 .tokenradek { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tokenradek input { width: 320px; max-width: 100%; }
 .audit td { font-size: 11.5px; }
@@ -100,6 +102,16 @@ export function renderNastaveni(
         <option value="">nese sám</option>${volby}
       </select>
       <span class="stav" data-stav="${o.id}">${stav}</span>
+      <div class="odkaz">
+        ${
+          o.view_token
+            ? `<input type="text" class="mono" readonly value="/v/${esc(o.view_token)}" data-odkaz="${o.id}" aria-label="Osobní odkaz ${esc(o.jmeno)}" />
+               <button class="btn" type="button" data-kopiruj="${o.id}">Kopírovat</button>
+               <button class="btn" type="button" data-zrus-odkaz="${o.id}">Zrušit</button>`
+            : `<span class="note">osobní přehled zatím nemá</span>
+               <button class="btn" type="button" data-vytvor-odkaz="${o.id}">Vytvořit odkaz</button>`
+        }
+      </div>
     </div>`;
     })
     .join('');
@@ -240,6 +252,29 @@ el('ulozit-identifikaci').addEventListener('click', async () => {
   if (vysledek.ok) { location.reload(); return; }
   const stav = document.querySelector('[data-stav]');
   if (stav) { stav.textContent = vysledek.chyba; stav.className = 'stav chyba'; }
+});
+
+document.querySelectorAll('[data-vytvor-odkaz]').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const v = await posli('/api/odkaz', { member_id: Number(b.dataset.vytvorOdkaz) });
+    if (v.ok) location.reload(); else alert(v.chyba);
+  });
+});
+document.querySelectorAll('[data-zrus-odkaz]').forEach((b) => {
+  b.addEventListener('click', async () => {
+    if (!confirm('Zrušit odkaz? Kdo ho má uložený, přestane se dostat na přehled.')) return;
+    const v = await posli('/api/odkaz/zrusit', { member_id: Number(b.dataset.zrusOdkaz) });
+    if (v.ok) location.reload(); else alert(v.chyba);
+  });
+});
+document.querySelectorAll('[data-kopiruj]').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const pole = document.querySelector('[data-odkaz="' + b.dataset.kopiruj + '"]');
+    const plny = location.origin + pole.value;
+    try { await navigator.clipboard.writeText(plny); b.textContent = 'Zkopírováno'; }
+    catch { pole.select(); b.textContent = 'Vyber a zkopíruj'; }
+    setTimeout(() => { b.textContent = 'Kopírovat'; }, 2000);
+  });
 });
 
 el('ulozit-sledovani').addEventListener('click', async () => {

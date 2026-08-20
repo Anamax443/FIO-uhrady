@@ -617,3 +617,35 @@ export function renderOApp(
     status: `<span>verze <b>${esc(commit)}</b></span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
   });
 }
+
+/**
+ * Podíl osoby po měsících — pro graf na jejím přehledu.
+ * Uzavřené měsíce ze zamražených čísel, otevřené z aktuálního nastavení.
+ */
+export function vyvojPodilu(
+  prehled: Prehled,
+  uzaverky: Map<string, Uzaverka>,
+  nastaveni: Nastaveni,
+  member_id: number,
+  ted = new Date(),
+): { mesic: string; castka: number; uzavreno: boolean }[] {
+  const mesicu = Math.max(1, pocetMesicu(nastaveni.vyuctovani_od, nastaveni.den_splatnosti, ted));
+  const deti = prehled.osoby.filter((d) => (d.pod_member_id ?? null) === member_id).map((d) => d.id);
+
+  const body: { mesic: string; castka: number; uzavreno: boolean }[] = [];
+  for (let i = 0; i < mesicu; i++) {
+    const mesic = posunMesic(nastaveni.vyuctovani_od, i);
+    const uzaverka = uzaverky.get(mesic);
+    if (uzaverka) {
+      body.push({ mesic, castka: uzaverka.podily.get(member_id)?.podil ?? 0, uzavreno: true });
+      continue;
+    }
+    const souhrn = spocitej(prehled, mesic);
+    const castka = [member_id, ...deti].reduce(
+      (a, id) => a + (souhrn.mesicneOsoba.get(id) ?? 0) + (souhrn.saldoOsoba.get(id) ?? 0),
+      0,
+    );
+    body.push({ mesic, castka, uzavreno: false });
+  }
+  return body;
+}

@@ -226,6 +226,32 @@ const KAPITOLY: Kapitola[] = [
         <li>Ve Vyrovnání je vidět, kolik měsíců ještě uzavřených není.</li>
       </ul>`,
   },  {
+    id: 'odkaz',
+    nadpis: 'Osobní přehled pro člena',
+    telo: `
+      <p>
+        Každý člen může dostat <b>vlastní odkaz</b> na svůj přehled — vytvoří se v Nastavení
+        u jeho řádku. Odkaz je náhodný a neuhodnutelný; kdo ho má, dostane se na stránku
+        bez přihlášení.
+      </p>
+      <p>Na svém přehledu vidí:</p>
+      <ul>
+        <li><b>kolik zbývá doplatit</b> nebo kolik má předplaceno, velkým písmem hned nahoře;</li>
+        <li><b>QR platbu</b> na tu částku — naskenuje se v mobilní bance, částka i variabilní
+            symbol se vyplní samy, takže nevznikne překlep;</li>
+        <li>výši své zálohy a datum nejbližší splatnosti;</li>
+        <li><b>graf</b> svého podílu po měsících a seznam svých plateb;</li>
+        <li><b>náklady domu na rok</b> po kategoriích a položkách.</li>
+      </ul>
+      <div class="poznamka">
+        Ze svého přehledu se <b>nedozví nic o ostatních</b> — kolik platí kdo jiný tam není.
+        Souhrn za dům je bez rozpadu na osoby.
+      </div>
+      <p>
+        Odkaz jde kdykoli <b>zrušit</b> a vytvořit nový; ten starý tím okamžitě přestane platit.
+        Vytvoření i zrušení se zapisuje do historie.
+      </p>`,
+  },  {
     id: 'nastaveni',
     nadpis: 'Nastavení a token do banky',
     telo: `
