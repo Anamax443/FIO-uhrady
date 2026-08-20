@@ -6,6 +6,7 @@
  * tedy tvrdil, že tehdy platilo, co platí dnes. Uzávěrka to utne.
  */
 import { spocitej } from './admin-page.js';
+import { kdyZavreMesic } from './automat.js';
 import type { Nastaveni, Uzaverka, Zaloha } from './db.js';
 import { zalohaVMesici } from './db.js';
 import { formatKc, mesicNyni, posunMesic } from './money.js';
@@ -25,6 +26,8 @@ const STYL = `
 .mesic .telo-mesice span:nth-child(even) { font-family: var(--mono); text-align: right; }
 .stav-ok { color: var(--ok); }
 .stav-otevreno { color: var(--warn); }
+.automat { border: 1px solid var(--border); border-radius: 2px; padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; background: var(--chrome-hi); max-width: 76ch; }
+.automat label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 @media (max-width: 560px) { .telo { padding: 10px 9px 14px; } }
 </style>`;
 
@@ -44,6 +47,7 @@ export function renderUzaverky(
   // Nabízí se jen měsíce, které už jsou po splatnosti — budoucnost uzavírat nejde.
   const mesice: string[] = [];
   for (let i = mesicu - 1; i >= 0; i--) mesice.push(posunMesic(nastaveni.vyuctovani_od, i));
+  const bezicMesic = mesicNyni();
 
   const bloky = mesice
     .map((mesic) => {
@@ -109,8 +113,23 @@ export function renderUzaverky(
         nebo doběhne rozpouštěné uhlí, zpětný pohled by tvrdil, že tehdy platilo dnešní číslo.
         Proto se měsíce po splatnosti uzavírají.
       </p>
+      <div class="automat">
+        <label>
+          <input type="checkbox" id="auto-uzaverka"${nastaveni.auto_uzaverka ? ' checked' : ''} />
+          <b>Zavírat měsíce sám</b>
+        </label>
+        <span class="note">
+          Měsíc se uzavře <b>${nastaveni.den_splatnosti}. dne následujícího měsíce</b> —
+          ${esc(bezicMesic)} tedy ${esc(kdyZavreMesic(bezicMesic, nastaveni.den_splatnosti))}.
+          Ten měsíc navíc je schválně: platba poslaná na poslední chvíli se připíše až za pár dní
+          a bez té rezervy by uzávěrka zamrazila díru, která žádná není.
+        </span>
+        <span class="note" id="auto-stav"></span>
+      </div>
       <p class="vysvetleni note">
-        Uzávěrku jde zrušit, když se najde chyba — obojí se zapisuje do historie se jménem a časem.
+        Automat nikdy nepřepíše, co už je hotové — uzavřený měsíc nechá být. Uzávěrku jde zrušit
+        i zavřít ručně, když se najde chyba; všechno se zapisuje do historie se jménem a časem,
+        takže je poznat, co udělal člověk a co appka sama.
       </p>
       ${bloky || '<p class="vysvetleni">Zatím není co uzavírat — první měsíc bude po splatnosti.</p>'}
     </div>
@@ -135,6 +154,20 @@ document.querySelectorAll('[data-zrus]').forEach((b) => {
     if (!confirm('Zrušit uzávěrku ' + b.dataset.zrus + '? Měsíc se pak zase počítá z aktuálního nastavení.')) return;
     void posli('/api/uzaverka/zrusit', { obdobi: b.dataset.zrus }, b.dataset.zrus);
   });
+});
+
+const prepinac = document.getElementById('auto-uzaverka');
+prepinac.addEventListener('change', async () => {
+  const stav = document.getElementById('auto-stav');
+  stav.textContent = 'ukládám…';
+  const odpoved = await fetch('/api/automat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ auto_uzaverka: prepinac.checked }),
+  });
+  const data = await odpoved.json().catch(() => ({}));
+  stav.textContent = odpoved.ok
+    ? (prepinac.checked ? 'Zapnuto — měsíce se budou zavírat samy.' : 'Vypnuto — měsíce zavírej ručně tlačítkem.')
+    : (data.chyba || 'Nepovedlo se uložit.');
 });
 </script>`;
 

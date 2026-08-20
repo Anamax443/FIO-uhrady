@@ -22,6 +22,12 @@ export interface Nastaveni {
   rezerva_procent: number;
   /** nedoplatek do téhle výše se rozpustí do zálohy, nad ni se appka zeptá (haléře) */
   prah_doplatku: number;
+  /** zavírat měsíce samo, den splatnosti následujícího měsíce */
+  auto_uzaverka: boolean;
+  /** vyúčtovat období samo, jakmile je celé uzavřené */
+  auto_vyuctovani: boolean;
+  /** délka vyúčtovacího období v měsících */
+  vyuctovani_mesicu: number;
 }
 
 interface ReadekPolozky {
@@ -684,6 +690,11 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     rezerva_procent: Number(mapa.get('rezerva_procent') ?? '10'),
     prah_doplatku: Number(mapa.get('prah_doplatku') ?? '500000'),
     den_splatnosti: Number(mapa.get('den_splatnosti') ?? '20'),
+    // Výchozí je zapnuto: appka má běžet bez obsluhy. Admin to může vypnout
+    // a všechno dělat ručně; automat nikdy nepřepíše, co už je hotové.
+    auto_uzaverka: (mapa.get('auto_uzaverka') ?? '1') === '1',
+    auto_vyuctovani: (mapa.get('auto_vyuctovani') ?? '1') === '1',
+    vyuctovani_mesicu: Math.max(1, Number(mapa.get('vyuctovani_mesicu') ?? '12')),
   };
 }
 

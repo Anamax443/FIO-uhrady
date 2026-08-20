@@ -174,7 +174,12 @@ export function radkyKUlozeni(
     const volba = rozhodnuti.get(r.osoba.id);
     // Bez zálohy není do čeho rozpouštět — u toho, od koho příspěvky nechodí,
     // zůstává rozdíl stát mimo zálohu.
-    const zpusob: ZpusobVyrovnani = !r.sledovat ? 'jednorazove' : (volba?.zpusob ?? 'do_zalohy');
+    //
+    // Bez rozhodnutí (automatické vyúčtování) platí to samé, co má stránka
+    // předvybrané: nedoplatek nad práh se do zálohy nerozpouští, protože by
+    // ji zvedl skokem.
+    const vychozi: ZpusobVyrovnani = r.nadPrah ? 'jednorazove' : 'do_zalohy';
+    const zpusob: ZpusobVyrovnani = !r.sledovat ? 'jednorazove' : (volba?.zpusob ?? vychozi);
     const nova_zaloha = !r.sledovat
       ? 0
       : (volba?.nova_zaloha ?? (zpusob === 'do_zalohy' ? r.sRozdilem : r.zaklad));
@@ -233,6 +238,9 @@ const STYL = `
 .preplatek { color: var(--ok); }
 .varovani { color: var(--warn); }
 .skupina { margin: 6px 0 0; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
+.automat { border: 1px solid var(--border); border-radius: 2px; padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; background: var(--chrome-hi); max-width: 76ch; }
+.automat label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.automat .popisek { color: var(--text-dim); }
 .akce { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
 .historie { border: 1px solid var(--border); border-radius: 2px; }
 .historie .radek { display: flex; align-items: baseline; gap: 10px; padding: 6px 11px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
@@ -409,6 +417,23 @@ export function renderVyuctovani(
         Vyúčtovat jde jen <b>uzavřené</b> měsíce. Co se jednou vyúčtuje, se v dalším období
         už nepočítá: počátek sledování se posune za konec období a další dluh se sčítá od nuly.
       </p>
+      <div class="automat">
+        <label>
+          <input type="checkbox" id="auto-vyuctovani"${nastaveni.auto_vyuctovani ? ' checked' : ''} />
+          <b>Vyúčtovat období samo</b>
+        </label>
+        <span class="popisek">
+          Jakmile je uzavřených <b>${nastaveni.vyuctovani_mesicu}</b> měsíců v řadě, appka období
+          vyúčtuje sama: rozdíl rozpustí do nové zálohy a nedoplatek nad práh
+          ${formatKc(nastaveni.prah_doplatku)} nechá k doplacení zvlášť — přesně to, co má
+          formulář níž předvybrané. Zatím uzavřených: <b>${moznaObdobi.length}</b>.
+        </span>
+        <span class="popisek">
+          Hotové vyúčtování automat nikdy nepřepíše. Když ti výsledek nesedí, zruš ho
+          a udělej znovu ručně — v historii je vidět, že ho dělala appka.
+        </span>
+        <span class="popisek" id="auto-stav"></span>
+      </div>
       ${vyber}
       ${
         moznaObdobi.length === 0
@@ -461,6 +486,20 @@ if (ulozit) ulozit.addEventListener('click', async () => {
   });
   const data = await odpoved.json().catch(() => ({}));
   if (odpoved.ok) location.href = '/admin/vyrovnani'; else stav.textContent = data.chyba || 'Nepovedlo se uložit.';
+});
+
+const prepinac = document.getElementById('auto-vyuctovani');
+prepinac.addEventListener('change', async () => {
+  const stavAuto = document.getElementById('auto-stav');
+  stavAuto.textContent = 'ukládám…';
+  const odpoved = await fetch('/api/automat', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ auto_vyuctovani: prepinac.checked }),
+  });
+  const data = await odpoved.json().catch(() => ({}));
+  stavAuto.textContent = odpoved.ok
+    ? (prepinac.checked ? 'Zapnuto — období se vyúčtuje samo, až bude celé uzavřené.' : 'Vypnuto — vyúčtuj ručně tlačítkem níž.')
+    : (data.chyba || 'Nepovedlo se uložit.');
 });
 
 document.querySelectorAll('[data-zrus]').forEach((tlacitko) => {

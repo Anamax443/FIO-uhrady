@@ -180,6 +180,14 @@ table { min-width: 760px; }
 .col-per { width: 108px; color: var(--text-dim); }
 .col-druh { width: 104px; color: var(--text-dim); }
 .col-stav { width: 116px; }
+.col-kat { width: 124px; color: var(--text-dim); }
+.kategorie { border-top: 1px solid var(--border); }
+.kat-telo { padding: 9px 12px 12px; display: flex; flex-direction: column; gap: 7px; max-width: 720px; }
+.kat { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.kat .jmeno { font-weight: 550; }
+.kat .mesicne { font-family: var(--mono); }
+.kat .rocne { font-family: var(--mono); color: var(--text-faint); font-size: 11.5px; }
+.kat i { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--accent); opacity: .5; }
 .nazev { font-weight: 600; }
 .nazev .pozn { font-weight: 400; color: var(--text-faint); }
 .druh.d-pravidelny .dot { background: var(--accent); }
@@ -276,6 +284,9 @@ function grid(prehled: Prehled, s: Souhrn): string {
 
       return `<tr data-id="${p.id}"${i === 0 ? ' data-selected="true"' : ''} tabindex="0">
   <td class="nazev">${esc(p.nazev)}${p.poznamka ? ` <span class="pozn">— ${esc(p.poznamka)}</span>` : ''}</td>
+  <td class="col-kat" data-popis="Kategorie">${
+    p.kategorie ? esc(p.kategorie) : '<span class="pozn">bez kategorie</span>'
+  }</td>
   <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
   <td class="col-per" data-popis="Kdy">${esc(kdy)}</td>
   <td class="col-num" data-popis="Za období">${formatKc(p.castka_celkem)}</td>
@@ -299,7 +310,7 @@ function grid(prehled: Prehled, s: Souhrn): string {
   return `<div class="gridwrap">
   <table id="grid">
     <thead><tr>
-      <th>Položka</th><th class="col-druh">Druh</th><th class="col-per">Perioda / datum</th>
+      <th>Položka</th><th class="col-kat">Kategorie</th><th class="col-druh">Druh</th><th class="col-per">Perioda / datum</th>
       <th class="col-num">Za období</th><th class="col-num">Měsíčně / jednorázově</th>
       ${hlavicky}
       <th class="col-stav">Stav</th>
@@ -307,20 +318,64 @@ function grid(prehled: Prehled, s: Souhrn): string {
     <tbody>${radky}</tbody>
     <tfoot>
       <tr>
-        <td>Pravidelné náklady měsíčně</td><td></td><td></td><td></td>
+        <td>Pravidelné náklady měsíčně</td><td></td><td></td><td></td><td></td>
         <td class="col-num">${formatKc(s.mesicneCelkem)}</td>
         ${soucty(s.mesicneOsoba, false)}
         <td></td>
       </tr>
       <tr>
-        <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td>
+        <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td><td></td>
         <td class="col-num${s.saldoCelkem < 0 ? ' minus' : ''}">${formatKcZnamenko(s.saldoCelkem)}</td>
         ${soucty(s.saldoOsoba, true)}
         <td></td>
       </tr>
     </tfoot>
   </table>
+  ${podleKategorii(s)}
 </div>`;
+}
+
+/**
+ * Souhrn po kategoriích pod tabulkou — tentýž pohled, jaký má člen na telefonu.
+ *
+ * Do ročního součtu jdou jen pravidelné a rozpouštěné náklady: dvanáctinásobek
+ * jednorázové položky by kategorie rozhodil a nesouhlasil by s celkem.
+ */
+function podleKategorii(s: Souhrn): string {
+  const kategorie = new Map<string, number>();
+  for (const r of s.radky) {
+    if (r.castka === 0 || r.jednorazovy) continue;
+    const klic = r.polozka.kategorie ?? 'Bez kategorie';
+    kategorie.set(klic, (kategorie.get(klic) ?? 0) + r.castka);
+  }
+  if (kategorie.size === 0) return '';
+
+  const serazene = [...kategorie.entries()].sort((a, b) => b[1] - a[1]);
+  const max = Math.max(...serazene.map(([, v]) => v), 1);
+
+  const radky = serazene
+    .map(
+      ([nazev, castka]) => `<div class="kat">
+      <span class="jmeno">${esc(nazev)}</span>
+      <span class="mesicne">${formatKc(castka)}</span>
+      <span class="rocne">${formatKc(castka * 12)} / rok</span>
+      <i style="width:${Math.round((castka / max) * 100)}%"></i>
+    </div>`,
+    )
+    .join('');
+
+  return `<section class="kategorie">
+    <div class="panehead"><svg class="icon icon-sm"><use href="#i-grid"/></svg>Po kategoriích
+      <span class="count">${formatKc(s.mesicneCelkem)} měsíčně · ${formatKc(s.rocneCelkem)} ročně</span>
+    </div>
+    <div class="kat-telo">
+      ${radky}
+      <p class="pozn">
+        Jen pravidelné a rozpouštěné náklady — jednorázové položky do ročního součtu nepatří.
+        Tohle je ten samý pohled, jaký vidí člen na svém přehledu.
+      </p>
+    </div>
+  </section>`;
 }
 
 function detail(prehled: Prehled): string {

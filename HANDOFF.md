@@ -2,6 +2,41 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — bezobslužný provoz a kategorie v nákladech
+
+**Uzávěrky a vyúčtování se dělají samy** (`src/automat.ts`, běží z cronu vedle
+stahování z Fio). Dvě pravidla, na kterých to stojí:
+
+1. **Nikdy nepřepsat, co je hotové.** Uzavřený měsíc se znovu nezavírá — kdyby
+   ano, každý běh cronu by zamrazil dnešní čísla a uzávěrka by ztratila smysl.
+2. **Zavírat až dnem splatnosti následujícího měsíce** (srpen → 20. září).
+   Ten měsíc navíc je schválně: platba poslaná na poslední chvíli se připíše
+   za pár dní a bez rezervy by uzávěrka zamrazila díru, která žádná není.
+
+Vyúčtování se spustí, teprve když je uzavřených `vyuctovani_mesicu` (výchozí 12)
+**v řadě**. Bez rozhodnutí platí to, co má formulář předvybrané: rozdíl do zálohy,
+nedoplatek nad práh zvlášť k doplacení. Do auditu se podepisuje `automat (cron)`.
+
+Obojí jde vypnout přepínačem na své stránce; **admin má poslední slovo** —
+uzávěrku i vyúčtování jde zrušit a udělat znovu ručně. Tím se mění dřívější
+rozhodnutí „zálohu stanoví admin" na „stanoví ji automat, admin ji může přepsat".
+
+Stahování z Fio a uzávěrky jsou teď v cronu **nezávislé** — chybějící token ani
+výpadek banky nesmí zastavit zavírání měsíců.
+
+**Ověřeno lokálně** (dnes 2026-08-20, splatnost 20., období 3 měsíce, sledování
+od 2026-01): 1. běh zavřel 2026-01 až 2026-07 (srpen správně **ne**, ten se
+zavírá 20. 9.) a vyúčtoval 01–03; 2. běh nezavřel nic a vyúčtoval 04–06;
+3. běh „nic k uzavření ani k vyúčtování". Vypnutí obou přepínačů to hlásí
+srozumitelně, audit sedí.
+
+**Náklady domu: sloupec Kategorie a souhrn po kategoriích pod tabulkou** — tentýž
+pohled, jaký má člen na telefonu. Do souhrnu jdou jen pravidelné a rozpouštěné
+náklady; dvanáctinásobek jednorázové položky by kategorie rozhodil.
+
+**Migrace 0010 není povinná** — výchozí hodnoty automatiky drží kód, do `settings`
+se zapíšou při prvním přepnutí.
+
 ## 2026-08-20 — osobní přehled: měsíc po měsíci na první straně, zbytek do panelu
 
 Zpětná vazba od uživatele: na první straně má být **aktuální stav a jednotlivé

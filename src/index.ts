@@ -8,6 +8,7 @@
  * Rozvržení cest viz README.md, pravidla párování viz docs/ARCHITECTURE.md.
  */
 import { renderNaklady } from './admin-page.js';
+import { dobehniAutomatiku, kdyZavreMesic } from './automat.js';
 import {
   kdoZeCookie,
   maPin,
@@ -160,6 +161,10 @@ function popisChyby(detail: string): string {
   }
   return 'Uložení se nepovedlo. Podrobnost je níž a taky v logu Workeru.';
 }
+
+/** Do auditu patří i to, kdy se bude zavírat — jinak je „zapnuto" prázdné slovo. */
+const nastaveniProAudit = (n: { den_splatnosti: number }): string =>
+  `(${n.den_splatnosti}. dne následujícího měsíce)`;
 
 const chybovaStranka = (chyba: string, detail: string, commit: string): string =>
   `<!doctype html><html lang="cs"><head><meta charset="utf-8" />
@@ -549,6 +554,35 @@ export default {
           return json({ ok: true, od: podklad.od, do: podklad.do, dalsi: podklad.dalsi });
         }
 
+        if (request.method === 'POST' && path === '/api/automat') {
+          const d = (await telo(request)) as { auto_uzaverka?: boolean; auto_vyuctovani?: boolean };
+          if (d.auto_uzaverka !== undefined) {
+            await ulozNastaveni(
+              env.DB,
+              'auto_uzaverka',
+              d.auto_uzaverka ? '1' : '0',
+              kdo,
+              d.auto_uzaverka
+                ? `Měsíce se budou zavírat samy ${nastaveniProAudit(await nactiNastaveni(env.DB))}`
+                : 'Automatické uzávěrky vypnuty — měsíce se budou zavírat ručně',
+            );
+          }
+          if (d.auto_vyuctovani !== undefined) {
+            await ulozNastaveni(
+              env.DB,
+              'auto_vyuctovani',
+              d.auto_vyuctovani ? '1' : '0',
+              kdo,
+              d.auto_vyuctovani
+                ? 'Období se bude vyúčtovávat samo, jakmile bude celé uzavřené'
+                : 'Automatické vyúčtování vypnuto — vyúčtovávat se bude ručně',
+            );
+          }
+          // Změna se projeví hned, ne až za čtvrt hodiny s cronem.
+          const vysledek = await dobehniAutomatiku(env.DB);
+          return json({ ok: true, ...vysledek });
+        }
+
         if (request.method === 'POST' && path === '/api/vyuctovani/zrusit') {
           const d = (await telo(request)) as { do?: string };
           await zrusVyuctovani(env.DB, String(d.do ?? '').trim(), kdo);
@@ -831,19 +865,35 @@ ${FAVICON}</head>
   },
 
   async scheduled(_event: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Stahování z banky a uzávěrky jsou dvě nezávislé věci. Chybějící token
+    // nebo výpadek Fio nesmí zastavit zavírání měsíců — jinak by se appka
+    // po jednom výpadku tiše přestala starat sama o sebe.
     const token = await nactiFioToken(env.DB);
     if (token === null) {
       // Není to selhání — appka jen čeká, až někdo vloží token v Nastavení.
       console.log(JSON.stringify({ udalost: 'cron', stav: 'čeká na token do Fio' }));
-      return;
+    } else {
+      try {
+        const nastaveni = await nactiNastaveni(env.DB);
+        const vysledek = await synchronizuj(env.DB, token, nastaveni.sync_window_days);
+        console.log(JSON.stringify({ udalost: 'cron', stav: 'ok', ...vysledek }));
+      } catch (err) {
+        // Podrobnost je i v sync_runs, tohle je jen stopa v logu Workeru.
+        console.error(JSON.stringify({ udalost: 'cron', stav: 'chyba', detail: String(err) }));
+      }
     }
+
     try {
-      const nastaveni = await nactiNastaveni(env.DB);
-      const vysledek = await synchronizuj(env.DB, token, nastaveni.sync_window_days);
-      console.log(JSON.stringify({ udalost: 'cron', stav: 'ok', ...vysledek }));
+      const vysledek = await dobehniAutomatiku(env.DB);
+      console.log(JSON.stringify({ udalost: 'automat', stav: 'ok', popis: vysledek.popis }));
     } catch (err) {
-      // Podrobnost je i v sync_runs, tohle je jen stopa v logu Workeru.
-      console.error(JSON.stringify({ udalost: 'cron', stav: 'chyba', detail: String(err) }));
+      console.error(
+        JSON.stringify({
+          udalost: 'automat',
+          stav: 'chyba',
+          detail: err instanceof Error ? err.message : String(err),
+        }),
+      );
     }
   },
 } satisfies ExportedHandler<Env>;
