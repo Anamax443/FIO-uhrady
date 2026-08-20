@@ -760,6 +760,7 @@ export default {
               vs: string | null;
               ucet: string | null;
               pod_member_id: number | null;
+              rod: string | null;
             }[];
           };
           for (const z of data.zmeny ?? []) {
@@ -774,6 +775,7 @@ export default {
                   z.pod_member_id === null || z.pod_member_id === undefined
                     ? null
                     : Number(z.pod_member_id),
+                rod: z.rod === null || z.rod === undefined ? null : String(z.rod),
               },
               kdo,
             );

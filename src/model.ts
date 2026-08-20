@@ -36,7 +36,23 @@ export interface Osoba {
   aktivni?: number;
   /** osobní odkaz na přehled; null = nevytvořený */
   view_token?: string | null;
+  /**
+   * Rod pro oslovení: 'zena' | 'muz' | null.
+   *
+   * Nastavuje se u osoby, **neodhaduje se z jména** — Nikola, Saša ani Jarda
+   * by nevyšli. Když není vyplněný, mluví appka neutrálně.
+   */
+  rod?: string | null;
 }
+
+export type Rod = 'zena' | 'muz' | null;
+
+/**
+ * Vybere tvar podle rodu. Bez vyplněného rodu se použije neutrální věta,
+ * ne mužský tvar — mužský rod není „výchozí", je to taky odhad.
+ */
+export const dleRodu = (rod: string | null | undefined, tvary: { zena: string; muz: string; neutr: string }): string =>
+  rod === 'zena' ? tvary.zena : rod === 'muz' ? tvary.muz : tvary.neutr;
 
 export interface Polozka {
   id: number;

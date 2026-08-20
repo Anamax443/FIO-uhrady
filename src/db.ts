@@ -59,7 +59,7 @@ export async function nactiOsoby(db: D1Database, iNeaktivni = false): Promise<Os
     .prepare(
       // `view_token` musí být v seznamu: bez něj Nastavení nepozná, že osoba
       // odkaz už má, a nabízelo by „Vytvořit odkaz" i po jeho vytvoření.
-      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token
+      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token, rod
          from members ${iNeaktivni ? '' : 'where aktivni = 1'} order by aktivni desc, id`,
     )
     .all<Osoba>();
@@ -595,7 +595,9 @@ export async function osobaPodleTokenu(db: D1Database, token: string): Promise<O
   if (!/^[0-9a-f]{32}$/.test(token)) return null;
   return await db
     .prepare(
-      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token
+      // Stejný seznam sloupců jako `nactiOsoby` — když se sem nějaký nedostane,
+      // osobní přehled o něm neví a tiše se chová, jako by nebyl vyplněný.
+      `select id, jmeno, je_platce, ucet, vs, pod_member_id, email, je_admin, aktivni, view_token, rod
          from members where view_token = ? and aktivni = 1`,
     )
     .bind(token)
@@ -1228,6 +1230,8 @@ export interface Identifikace {
   ucet: string | null;
   /** komu se podíl téhle osoby počítá (nezletilé dítě → rodič) */
   pod_member_id: number | null;
+  /** 'zena' | 'muz' | null — jak appka o osobě mluví; null = neutrálně */
+  rod: string | null;
 }
 
 /**
@@ -1243,7 +1247,7 @@ export async function ulozIdentifikaci(
   kdo: string,
 ): Promise<void> {
   const pred = await db
-    .prepare('select id, jmeno, je_platce, vs, ucet, pod_member_id from members where id = ?')
+    .prepare('select id, jmeno, je_platce, vs, ucet, pod_member_id, rod from members where id = ?')
     .bind(member_id)
     .first<{
       jmeno: string;
@@ -1251,8 +1255,11 @@ export async function ulozIdentifikaci(
       vs: string | null;
       ucet: string | null;
       pod_member_id: number | null;
+      rod: string | null;
     }>();
   if (pred === null) throw new ChybaVstupu('Osoba neexistuje.');
+
+  const rod = vstup.rod === 'zena' || vstup.rod === 'muz' ? vstup.rod : null;
 
   const vs = vstup.vs;
   if (vs !== null && !/^\d{1,10}$/.test(vs)) {
@@ -1308,11 +1315,12 @@ export async function ulozIdentifikaci(
     vs,
     ucet,
     pod_member_id: pod,
+    rod,
   };
   await db.batch([
     db
-      .prepare('update members set je_platce = ?, vs = ?, ucet = ?, pod_member_id = ? where id = ?')
-      .bind(po.je_platce, vs, ucet, pod, member_id),
+      .prepare('update members set je_platce = ?, vs = ?, ucet = ?, pod_member_id = ?, rod = ? where id = ?')
+      .bind(po.je_platce, vs, ucet, pod, rod, member_id),
     auditStatement(
       db,
       kdo,
@@ -1324,6 +1332,9 @@ export async function ulozIdentifikaci(
           ? `${pred.jmeno} posílá příspěvky na účet — VS ${vs ?? 'nenastaven'}${ucet ? `, účet ${ucet}` : ''}`
           : `${pred.jmeno} příspěvky na účet neposílá`,
         jmenoRodice ? `podíl se počítá ${jmenoRodice}` : null,
+        rod === pred.rod
+          ? null
+          : `appka o ${pred.jmeno} mluví ${rod === 'zena' ? 'v ženském rodě' : rod === 'muz' ? 'v mužském rodě' : 'neutrálně'}`,
       ]
         .filter(Boolean)
         .join('; '),

@@ -18,7 +18,7 @@ import type {
   ZpusobVyrovnani,
 } from './db.js';
 import { cisloMesice, formatKc, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
-import type { Osoba, Prehled } from './model.js';
+import { dleRodu, type Osoba, type Prehled } from './model.js';
 import { esc, shell } from './ui.js';
 
 export interface RadekVyuctovani {
@@ -310,16 +310,20 @@ export function renderVyuctovani(
       : `<div class="volba"><p class="vysvetleni">
           ${
             r.rozdil < 0
-              ? `Vložil${r.osoba.jmeno.endsWith('a') ? 'a' : ''} do domácnosti víc, než na ${
-                  r.osoba.jmeno.endsWith('a') ? 'ni' : 'něj'
-                } za období připadlo. <b>${formatKc(
+              ? `${dleRodu(r.osoba.rod, {
+                  zena: 'Vložila do domácnosti víc, než na ni',
+                  muz: 'Vložil do domácnosti víc, než na něj',
+                  neutr: 'Do domácnosti přišlo od téhle osoby víc, než na ni',
+                })} za období připadlo. <b>${formatKc(
                   -r.rozdil,
                 )}</b> se zapíše jako pohledávka — jsou to reálné peníze a nemají zmizet.`
               : `Od téhle osoby příspěvky na účet nechodí, takže se u ní <b>dluh nesleduje</b>
                  — skládá se jinak a narůstající číslo by nic neznamenalo. Řádek je tu proto,
-                 aby bylo vidět, co na ${
-                   r.osoba.jmeno.endsWith('a') ? 'ni' : 'něj'
-                 } za období připadlo.`
+                 aby bylo vidět, co na ${dleRodu(r.osoba.rod, {
+                   zena: 'ni',
+                   muz: 'něj',
+                   neutr: 'tuhle osobu',
+                 })} za období připadlo.`
           }
         </p></div>`;
 

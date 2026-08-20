@@ -12,7 +12,7 @@ import { spocitej } from './admin-page.js';
 import { zalohaVMesici, type Nastaveni, type Zaloha } from './db.js';
 import { pocetMesicu, type RadekVyrovnani } from './more-pages.js';
 import { cisloMesice, formatKc, mesicNyni, popisPeriody, posunMesic } from './money.js';
-import type { Osoba, Prehled } from './model.js';
+import { dleRodu, type Osoba, type Prehled } from './model.js';
 import { esc, FAVICON } from './ui.js';
 
 export interface PlatbaClena {
@@ -281,7 +281,11 @@ export function renderClen(
         : m.prislo === 0
           ? 'v tomhle měsíci nepřišlo nic'
           : m.prislo < m.maPoslat
-            ? `poslal${osoba.jmeno.endsWith('a') ? 'a' : ''} jsi míň, než měl${osoba.jmeno.endsWith('a') ? 'a' : ''}`
+            ? dleRodu(osoba.rod, {
+                zena: 'poslala jsi míň, než měla',
+                muz: 'poslal jsi míň, než měl',
+                neutr: 'přišlo míň, než mělo',
+              })
             : m.prislo > m.maPoslat
               ? 'poslané navíc se odečte'
               : 'sedí';

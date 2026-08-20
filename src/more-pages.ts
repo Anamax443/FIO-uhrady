@@ -5,7 +5,7 @@
 import { spocitej } from './admin-page.js';
 import { zalohaVMesici, type Beh, type Nastaveni, type Uzaverka, type Zaloha } from './db.js';
 import { formatKc, formatKcZnamenko, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
-import type { Osoba, Prehled } from './model.js';
+import { dleRodu, type Osoba, type Prehled } from './model.js';
 import { esc, shell } from './ui.js';
 
 /* ---------- společné výpočty ---------- */
@@ -431,7 +431,15 @@ export function renderVyrovnani(
       <div class="vypocet">
         <span>Měsíční podíl na nákladech</span><span>${formatKc(r.mesicne)}</span>
         <span>Ročně</span><span>${formatKc(r.mesicne * 12)}</span>
-        ${r.zaplaceno !== 0 ? `<span>Zaplatil${r.osoba.jmeno.endsWith('a') ? 'a' : ''} ze svého</span><span>${formatKc(r.zaplaceno)}</span>` : ''}
+        ${
+          r.zaplaceno !== 0
+            ? `<span>${dleRodu(r.osoba.rod, {
+                zena: 'Zaplatila ze svého',
+                muz: 'Zaplatil ze svého',
+                neutr: 'Zaplaceno ze svého',
+              })}</span><span>${formatKc(r.zaplaceno)}</span>`
+            : ''
+        }
         ${
           r.zustatek < 0
             ? `<span class="preplatek">Z vyúčtování má k dobru</span><span class="preplatek">${formatKc(-r.zustatek)}</span>`

@@ -25,7 +25,7 @@ const STYL = `
 .panel .telo { padding: 11px 12px 14px; display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
 .vysvetleni { color: var(--text-dim); max-width: 76ch; margin: 0; }
 .vysvetleni code { font-family: var(--mono); font-size: 11.5px; }
-.hlavicky, .radek { display: grid; grid-template-columns: 118px 88px 104px 152px 132px minmax(0, 1fr); gap: 10px; align-items: center; }
+.hlavicky, .radek { display: grid; grid-template-columns: 112px 82px 100px 148px 124px 96px minmax(0, 1fr); gap: 9px; align-items: center; }
 .hlavicky { font-size: 10.5px; letter-spacing: .55px; text-transform: uppercase; color: var(--text-faint); border-bottom: 1px solid var(--border-soft); padding-bottom: 3px; }
 .radek .jmeno { font-weight: 600; }
 .radek .stav { color: var(--text-faint); }
@@ -109,6 +109,12 @@ export function renderNastaveni(
       <select data-pod="${o.id}" aria-label="Podíl ${esc(o.jmeno)} se počítá">
         <option value="">nese sám</option>${volby}
       </select>
+      <select data-rod="${o.id}" aria-label="Rod ${esc(o.jmeno)}"
+              title="Jak o téhle osobě appka mluví. Neurčeno = neutrálně, nic se nehádá.">
+        <option value=""${o.rod ? '' : ' selected'}>neurčeno</option>
+        <option value="zena"${o.rod === 'zena' ? ' selected' : ''}>žena</option>
+        <option value="muz"${o.rod === 'muz' ? ' selected' : ''}>muž</option>
+      </select>
       <span class="stav" data-stav="${o.id}">${stav}</span>
       <div class="odkaz">
         ${
@@ -174,8 +180,13 @@ export function renderNastaveni(
           Nezletilé dítě má svůj podíl, ať je vidět, co stojí — ale závazek za něj nese rodič.
           Nastav to sloupcem <b>Podíl nese</b>; v přehledu pak zůstane vidět zvlášť i sečtený.
         </p>
+        <p class="vysvetleni">
+          Sloupec <b>Rod</b> říká, jak o té osobě aplikace mluví („poslala jsi míň, než měla").
+          Dřív se to odhadovalo z toho, jestli jméno končí na „a" — což u Nikoly nebo Saši
+          nevyjde. Když rod necháš neurčený, mluví appka <b>neutrálně</b> a nic nehádá.
+        </p>
         <div class="hlavicky">
-          <span>Osoba</span><span>Na účet</span><span>VS</span><span>Číslo účtu</span><span>Podíl nese</span><span></span>
+          <span>Osoba</span><span>Na účet</span><span>VS</span><span>Číslo účtu</span><span>Podíl nese</span><span>Rod</span><span></span>
         </div>
         ${radky}
         <div class="tokenradek">
@@ -273,12 +284,14 @@ el('ulozit-identifikaci').addEventListener('click', async () => {
     const id = Number(r.dataset.osoba);
     const hodnota = (sel) => { const v = r.querySelector(sel).value.trim(); return v === '' ? null : v; };
     const pod = r.querySelector('[data-pod="' + id + '"]').value;
+    const rod = r.querySelector('[data-rod="' + id + '"]').value;
     return {
       member_id: id,
       je_platce: r.querySelector('[data-platce="' + id + '"]').checked,
       vs: hodnota('[data-vs="' + id + '"]'),
       ucet: hodnota('[data-ucet="' + id + '"]'),
       pod_member_id: pod === '' ? null : Number(pod),
+      rod: rod === '' ? null : rod,
     };
   });
   const vysledek = await posli('/api/identifikace', { zmeny: zmeny });
