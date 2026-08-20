@@ -381,13 +381,19 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 .hlavicka-vpravo { display: flex; align-items: center; gap: 10px; }
 .ham { background: var(--karta); border: 1px solid var(--linka); border-radius: 8px; padding: 5px 8px; cursor: pointer; color: var(--text); display: flex; }
 .ham svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; }
-.zaves { position: fixed; inset: 0; background: rgba(8, 14, 20, .5); border: 0; padding: 0; }
+/* Zavřeno je výchozí stav a drží ho třída, ne atribut hidden.
+   Pravidlo třídy s "display: flex" atribut hidden přebije a panel by zůstal
+   pořád na obrazovce — což se přesně stalo. */
+.zaves, .panel { display: none; }
+.zaves { position: fixed; inset: 0; z-index: 2; background: rgba(8, 14, 20, .5); border: 0; padding: 0; }
+.zaves.otevreno { display: block; }
 .panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 94vw); z-index: 2;
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 94vw); z-index: 3;
   background: var(--pozadi); border-left: 1px solid var(--linka); overflow-y: auto;
-  padding: 12px 12px 40px; display: flex; flex-direction: column; gap: 12px;
+  padding: 12px 12px 40px; flex-direction: column; gap: 12px;
   box-shadow: -10px 0 28px rgba(8, 14, 20, .22);
 }
+.panel.otevreno { display: flex; }
 .panel-hlava { display: flex; justify-content: space-between; align-items: center; position: sticky; top: -12px; background: var(--pozadi); padding: 4px 0 6px; margin: -4px 0 0; }
 .zavri { font: inherit; font-size: 18px; line-height: 1; background: var(--karta); border: 1px solid var(--linka); border-radius: 8px; padding: 5px 10px; color: var(--text); cursor: pointer; }
 .panel .karta { scroll-margin-top: 44px; }
@@ -524,6 +530,9 @@ const zaves = document.getElementById('zaves');
 const ham = document.getElementById('ham');
 
 function prepni(otevrit, kam) {
+  panel.classList.toggle('otevreno', otevrit);
+  zaves.classList.toggle('otevreno', otevrit);
+  // Atribut hidden drží význam pro čtečky, o zobrazení rozhoduje třída.
   panel.hidden = !otevrit;
   zaves.hidden = !otevrit;
   ham.setAttribute('aria-expanded', otevrit ? 'true' : 'false');
@@ -540,7 +549,9 @@ function prepni(otevrit, kam) {
 ham.addEventListener('click', () => prepni(true));
 zaves.addEventListener('click', () => prepni(false));
 document.getElementById('zavri').addEventListener('click', () => prepni(false));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) prepni(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && panel.classList.contains('otevreno')) prepni(false);
+});
 document.querySelectorAll('[data-otevri]').forEach((b) => {
   b.addEventListener('click', () => prepni(true, b.dataset.otevri));
 });
