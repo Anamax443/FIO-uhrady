@@ -3,7 +3,7 @@
  * Log synchronizace a O aplikaci.
  */
 import { spocitej } from './admin-page.js';
-import { zalohaVMesici, type Beh, type Nastaveni, type Zaloha } from './db.js';
+import { zalohaVMesici, type Beh, type Nastaveni, type Uzaverka, type Zaloha } from './db.js';
 import { formatKc, formatKcZnamenko, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
 import type { Osoba, Prehled } from './model.js';
 import { esc, shell } from './ui.js';
@@ -67,8 +67,9 @@ export function vyrovnani(
   zaplaceno: Map<number, number>,
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
+  uzaverky: Map<string, Uzaverka> = new Map(),
   ted = new Date(),
-): { radky: RadekVyrovnani[]; mesicu: number } {
+): { radky: RadekVyrovnani[]; mesicu: number; otevrenych: number } {
   const odMesice = nastaveni.vyuctovani_od;
   const mesicu = pocetMesicu(odMesice, nastaveni.den_splatnosti, ted);
   const tentoMesic = mesicNyni(ted);
@@ -81,18 +82,26 @@ export function vyrovnani(
 
   // Skutečné náklady se sčítají měsíc po měsíci, ne průměrem — rozpouštěné
   // položky v některých měsících běží a v jiných ne, takže průměr by lhal.
+  //
+  // Uzavřený měsíc se bere ze zamražených čísel. Přepočítávat ho z dnešního
+  // nastavení by znamenalo tvrdit, že tehdy platilo, co platí teď.
   const skutecneZaOsobu = new Map<number, number>();
   const predepsanoZaOsobu = new Map<number, number>();
+  let otevrenych = 0;
   for (let i = 0; i < mesicu; i++) {
     const mesic = posunMesic(odMesice, i);
-    const souhrn = spocitej(prehled, mesic);
+    const uzaverka = uzaverky.get(mesic);
+    if (uzaverka === undefined) otevrenych++;
+    const souhrn = uzaverka === undefined ? spocitej(prehled, mesic) : null;
+
     for (const o of prehled.osoby) {
-      const podil = sectiSDetmi(o, souhrn.mesicneOsoba) + sectiSDetmi(o, souhrn.saldoOsoba);
+      const zamrazene = uzaverka?.podily.get(o.id);
+      const podil =
+        zamrazene?.podil ??
+        (souhrn === null ? 0 : sectiSDetmi(o, souhrn.mesicneOsoba) + sectiSDetmi(o, souhrn.saldoOsoba));
+      const zaloha = zamrazene?.zaloha ?? zalohaVMesici(zalohy, o.id, mesic);
       skutecneZaOsobu.set(o.id, (skutecneZaOsobu.get(o.id) ?? 0) + podil);
-      predepsanoZaOsobu.set(
-        o.id,
-        (predepsanoZaOsobu.get(o.id) ?? 0) + zalohaVMesici(zalohy, o.id, mesic),
-      );
+      predepsanoZaOsobu.set(o.id, (predepsanoZaOsobu.get(o.id) ?? 0) + zaloha);
     }
   }
 
@@ -135,7 +144,7 @@ export function vyrovnani(
       };
     });
 
-  return { radky, mesicu };
+  return { radky, mesicu, otevrenych };
 }
 
 /* ---------- Přehled ---------- */
@@ -160,13 +169,14 @@ export function renderPrehled(
   zaplaceno: Map<number, number>,
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
+  uzaverky: Map<string, Uzaverka>,
   beh: Beh | null,
   nepriraze: number,
   kdo: string,
   commit: string,
 ): string {
   const s = spocitej(prehled);
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni);
+  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
   const odMesice = nastaveni.vyuctovani_od;
   // Dluh se sčítá jen u těch, od koho příspěvky na účet opravdu chodí.
   const dluzi = radky.filter((r) => r.sledovat).reduce((a, r) => a + Math.max(0, r.rozdil), 0);
@@ -376,10 +386,11 @@ export function renderVyrovnani(
   zaplaceno: Map<number, number>,
   zalohy: Zaloha[],
   nastaveni: Nastaveni,
+  uzaverky: Map<string, Uzaverka>,
   kdo: string,
   commit: string,
 ): string {
-  const { radky, mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni);
+  const { radky, mesicu, otevrenych } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
   const odMesice = nastaveni.vyuctovani_od;
 
   const blok = (r: RadekVyrovnani): string => {
@@ -500,7 +511,7 @@ document.querySelectorAll('[data-uloz]').forEach((tlacitko) => {
     titulek: 'Příspěvky a vyrovnání',
     commit,
     obsah,
-    status: `<span>od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    status: `<span>od <b>${esc(odMesice)}</b></span><span>měsíců <b>${mesicu}</b></span><span>zbývá doplatit <b>${formatKc(celkem)}</b></span><span>sledováno <b>${sledovani.length}</b> z ${radky.length}</span>${otevrenych > 0 ? `<span class="warn">neuzavřeno <b>${otevrenych}</b> měs.</span>` : ""}<span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
     skript,
   });
 }

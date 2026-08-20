@@ -224,11 +224,14 @@ export const SYMBOLY = `
 <symbol id="i-export" viewBox="0 0 16 16"><path d="M8 10.6V2.4M5.2 5.2 8 2.4l2.8 2.8"/><path d="M2.8 10.2v2.4a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1v-2.4"/></symbol>
 <symbol id="i-import" viewBox="0 0 16 16"><path d="M8 2.4v8.2M5.2 7.8 8 10.6l2.8-2.8"/><path d="M2.8 10.2v2.4a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1v-2.4"/></symbol>
 <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13.4 8A5.4 5.4 0 1 1 11.6 4"/><path d="M13.7 1.6v3.1h-3.1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.2" y="7" width="9.6" height="6.8" rx="1"/><path d="M5.4 7V5.2a2.6 2.6 0 0 1 5.2 0V7"/></symbol>
 <symbol id="i-burger" viewBox="0 0 16 16"><path d="M2.4 4h11.2M2.4 8h11.2M2.4 12h11.2"/></symbol>
 <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5.2" cy="5.2" r="2.8"/><path d="m7.2 7.2 6 6M11.2 11.2l-1.4 1.4M13.2 9.2l-1.4 1.4"/></symbol>
 </defs></svg>`;
 
-type Stranka = 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'nastaveni' | 'log' | 'dokumentace' | 'oapp';
+type Stranka =
+  | 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'uzaverky'
+  | 'nastaveni' | 'log' | 'dokumentace' | 'oapp';
 
 interface Polozka {
   klic: Stranka | null;
@@ -243,6 +246,7 @@ const MENU: Polozka[] = [
   { klic: 'osoby', href: '/admin/osoby', ikona: 'i-users', popis: 'Osoby' },
   { klic: 'uhrady', href: '/admin/uhrady', ikona: 'i-bank', popis: 'Úhrady z Fio' },
   { klic: 'vyrovnani', href: '/admin/vyrovnani', ikona: 'i-doc', popis: 'Příspěvky a vyrovnání' },
+  { klic: 'uzaverky', href: '/admin/uzaverky', ikona: 'i-lock', popis: 'Uzávěrky' },
 ];
 
 const MENU_SPRAVA: Polozka[] = [

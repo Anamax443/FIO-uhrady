@@ -218,6 +218,110 @@ export async function ulozZalohu(
   ]);
 }
 
+export interface Uzaverka {
+  obdobi: string;
+  naklady_celkem: number;
+  uzavreno_at: string;
+  uzavrel: string | null;
+  /** klíč = member_id */
+  podily: Map<number, { podil: number; zaloha: number }>;
+}
+
+export async function nactiUzaverky(db: D1Database): Promise<Map<string, Uzaverka>> {
+  const [hlavicky, podily] = await Promise.all([
+    db
+      .prepare('select obdobi, naklady_celkem, uzavreno_at, uzavrel from uzaverky order by obdobi')
+      .all<{ obdobi: string; naklady_celkem: number; uzavreno_at: string; uzavrel: string | null }>(),
+    db
+      .prepare('select obdobi, member_id, podil, zaloha from uzaverka_podily')
+      .all<{ obdobi: string; member_id: number; podil: number; zaloha: number }>(),
+  ]);
+
+  const mapa = new Map<string, Uzaverka>();
+  for (const h of hlavicky.results) mapa.set(h.obdobi, { ...h, podily: new Map() });
+  for (const p of podily.results) {
+    mapa.get(p.obdobi)?.podily.set(p.member_id, { podil: p.podil, zaloha: p.zaloha });
+  }
+  return mapa;
+}
+
+export interface VstupUzaverky {
+  obdobi: string;
+  naklady_celkem: number;
+  podily: { member_id: number; podil: number; zaloha: number }[];
+  polozky: { cost_item_id: number; nazev: string; castka: number }[];
+}
+
+/** Zamrazí měsíc. Opakované uzavření přepíše, co v něm bylo — s novým záznamem v auditu. */
+export async function ulozUzaverku(db: D1Database, vstup: VstupUzaverky, kdo: string): Promise<void> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(vstup.obdobi)) {
+    throw new ChybaVstupu('Období čekám ve tvaru RRRR-MM.');
+  }
+
+  const davka = [
+    db.prepare('delete from uzaverka_podily where obdobi = ?').bind(vstup.obdobi),
+    db.prepare('delete from uzaverka_polozky where obdobi = ?').bind(vstup.obdobi),
+    db
+      .prepare(
+        `insert into uzaverky (obdobi, naklady_celkem, uzavrel) values (?, ?, ?)
+         on conflict(obdobi) do update set naklady_celkem = excluded.naklady_celkem,
+              uzavreno_at = datetime('now'), uzavrel = excluded.uzavrel`,
+      )
+      .bind(vstup.obdobi, vstup.naklady_celkem, kdo),
+  ];
+  for (const p of vstup.podily) {
+    davka.push(
+      db
+        .prepare('insert into uzaverka_podily (obdobi, member_id, podil, zaloha) values (?, ?, ?, ?)')
+        .bind(vstup.obdobi, p.member_id, p.podil, p.zaloha),
+    );
+  }
+  for (const p of vstup.polozky) {
+    davka.push(
+      db
+        .prepare('insert into uzaverka_polozky (obdobi, cost_item_id, nazev, castka) values (?, ?, ?, ?)')
+        .bind(vstup.obdobi, p.cost_item_id, p.nazev, p.castka),
+    );
+  }
+  davka.push(
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'uzaverka',
+      vstup.obdobi,
+      `Uzavřen měsíc ${vstup.obdobi} — náklady ${(vstup.naklady_celkem / 100).toLocaleString('cs-CZ')} Kč`,
+      null,
+      { obdobi: vstup.obdobi, naklady_celkem: vstup.naklady_celkem },
+    ),
+  );
+  await db.batch(davka);
+}
+
+export async function zrusUzaverku(db: D1Database, obdobi: string, kdo: string): Promise<void> {
+  const je = await db
+    .prepare('select obdobi from uzaverky where obdobi = ?')
+    .bind(obdobi)
+    .first<{ obdobi: string }>();
+  if (je === null) throw new ChybaVstupu('Tenhle měsíc uzavřený není.');
+
+  await db.batch([
+    db.prepare('delete from uzaverka_podily where obdobi = ?').bind(obdobi),
+    db.prepare('delete from uzaverka_polozky where obdobi = ?').bind(obdobi),
+    db.prepare('delete from uzaverky where obdobi = ?').bind(obdobi),
+    auditStatement(
+      db,
+      kdo,
+      'smazani',
+      'uzaverka',
+      obdobi,
+      `Zrušena uzávěrka měsíce ${obdobi} — měsíc se zase počítá z aktuálního nastavení`,
+      { obdobi },
+      null,
+    ),
+  ]);
+}
+
 export async function nactiBehy(db: D1Database, limit = 50): Promise<Beh[]> {
   const { results } = await db
     .prepare(

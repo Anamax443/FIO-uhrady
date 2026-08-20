@@ -206,6 +206,26 @@ const KAPITOLY: Kapitola[] = [
       </div>`,
   },
   {
+    id: 'uzaverky',
+    nadpis: 'Měsíční uzávěrky',
+    telo: `
+      <p>
+        Náklady se v čase mění — internet zdraží, uhlí doběhne, rozdělení se upraví.
+        Dokud je měsíc <b>otevřený</b>, počítá se z aktuálního nastavení, takže zpětný pohled
+        by tvrdil, že tehdy platilo dnešní číslo.
+      </p>
+      <p>
+        <b>Uzávěrka zamrazí</b>, co v měsíci opravdu platilo: celkové náklady, podíl každé osoby,
+        platnou zálohu a soupis položek. Vyrovnání pak ten měsíc bere ze zamražených čísel
+        a pozdější změny s ním už nehnou.
+      </p>
+      <ul>
+        <li>Uzavírají se jen měsíce <b>po splatnosti</b> — budoucnost zamrazit nejde.</li>
+        <li>Uzávěrku lze <b>zrušit</b>, když se najde chyba; měsíc se pak zase počítá z aktuálního
+            nastavení. Uzavření i zrušení se zapisuje do historie se jménem a časem.</li>
+        <li>Ve Vyrovnání je vidět, kolik měsíců ještě uzavřených není.</li>
+      </ul>`,
+  },  {
     id: 'nastaveni',
     nadpis: 'Nastavení a token do banky',
     telo: `

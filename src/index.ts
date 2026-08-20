@@ -38,13 +38,17 @@ import {
   ulozNastaveni,
   ulozOsobu,
   nactiBehy,
+  nactiUzaverky,
   nactiZalohy,
+  ulozUzaverku,
   ulozZalohu,
+  zrusUzaverku,
   zaplacenoOsobami,
 } from './db.js';
+import { podkladUzaverky, renderUzaverky } from './closings-page.js';
 import { renderDokumentace } from './docs-page.js';
-import { renderLog, renderOApp, renderOsoby, renderPrehled, renderVyrovnani } from './more-pages.js';
-import { popisDruhu, popisPeriody } from './money.js';
+import { renderLog, renderOApp, renderOsoby, renderPrehled, renderVyrovnani, vyrovnani } from './more-pages.js';
+import { mesicNyni, popisDruhu, popisPeriody } from './money.js';
 import { renderUhrady } from './payments-page.js';
 import { renderNastaveni } from './settings-page.js';
 import { synchronizuj } from './sync.js';
@@ -313,13 +317,14 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/prehled') {
-          const [prehled, zaplaceno, nastaveni, beh, platby, zalohy] = await Promise.all([
+          const [prehled, zaplaceno, nastaveni, beh, platby, zalohy, uzaverky] = await Promise.all([
             nactiPrehled(env.DB),
             zaplacenoOsobami(env.DB),
             nactiNastaveni(env.DB),
             posledniBeh(env.DB),
             nactiPlatby(env.DB, 500),
             nactiZalohy(env.DB),
+            nactiUzaverky(env.DB),
           ]);
           return html(
             renderPrehled(
@@ -327,6 +332,7 @@ export default {
               zaplaceno,
               zalohy,
               nastaveni,
+              uzaverky,
               beh,
               platby.filter((p) => p.member_id === null).length,
               kdo,
@@ -344,20 +350,51 @@ export default {
         }
 
         if (request.method === 'GET' && path === '/admin/vyrovnani') {
-          const [prehled, zaplaceno, nastaveni, zalohy] = await Promise.all([
+          const [prehled, zaplaceno, nastaveni, zalohy, uzaverky] = await Promise.all([
             nactiPrehled(env.DB),
             zaplacenoOsobami(env.DB),
             nactiNastaveni(env.DB),
             nactiZalohy(env.DB),
+            nactiUzaverky(env.DB),
           ]);
           return html(
-            renderVyrovnani(prehled, zaplaceno, zalohy, nastaveni, kdo, env.GIT_COMMIT ?? 'dev'),
+            renderVyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky, kdo, env.GIT_COMMIT ?? 'dev'),
           );
         }
 
         if (request.method === 'GET' && path === '/admin/dokumentace') {
           const nastaveni = await nactiNastaveni(env.DB);
           return html(renderDokumentace(nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
+        }
+
+        if (request.method === 'GET' && path === '/admin/uzaverky') {
+          const [prehled, zalohy, uzaverky, nastaveni, zaplaceno] = await Promise.all([
+            nactiPrehled(env.DB),
+            nactiZalohy(env.DB),
+            nactiUzaverky(env.DB),
+            nactiNastaveni(env.DB),
+            zaplacenoOsobami(env.DB),
+          ]);
+          const { mesicu } = vyrovnani(prehled, zaplaceno, zalohy, nastaveni, uzaverky);
+          return html(
+            renderUzaverky(prehled, zalohy, uzaverky, nastaveni, mesicu, kdo, env.GIT_COMMIT ?? 'dev'),
+          );
+        }
+
+        if (request.method === 'POST' && path === '/api/uzaverka') {
+          const d = (await telo(request)) as { obdobi?: string };
+          const obdobi = String(d.obdobi ?? '').trim();
+          // Budoucnost uzavírat nejde — nebylo by co zamrazit.
+          if (obdobi > mesicNyni()) throw new ChybaVstupu('Budoucí měsíc uzavřít nejde.');
+          const [prehled, zalohy] = await Promise.all([nactiPrehled(env.DB), nactiZalohy(env.DB)]);
+          await ulozUzaverku(env.DB, podkladUzaverky(prehled, zalohy, obdobi), kdo);
+          return json({ ok: true });
+        }
+
+        if (request.method === 'POST' && path === '/api/uzaverka/zrusit') {
+          const d = (await telo(request)) as { obdobi?: string };
+          await zrusUzaverku(env.DB, String(d.obdobi ?? '').trim(), kdo);
+          return json({ ok: true });
         }
 
         if (request.method === 'GET' && path === '/admin/log') {
