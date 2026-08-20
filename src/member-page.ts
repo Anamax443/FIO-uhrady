@@ -169,16 +169,31 @@ export function renderClen(
           )
           .join('');
 
+  // U každé položky i **můj** podíl — to je ta část, kvůli které se sem chodí.
+  // Kolik z toho platí ostatní, tady schválně není.
+  const mojeIds = [osoba.id, ...prehled.osoby.filter((d) => (d.pod_member_id ?? null) === osoba.id).map((d) => d.id)];
+  const mujPodilRadku = (r: (typeof souhrnDomu.radky)[number]): number =>
+    mojeIds.reduce((a, id) => a + (r.naOsobu.get(id) ?? 0), 0);
+
   const polozkyDomu = souhrnDomu.radky
     .filter((r) => r.castka !== 0 && !r.jednorazovy)
     .sort((a, b) => b.castka - a.castka)
-    .map(
-      (r) => `<div class="polozka">
-      <span>${esc(r.polozka.nazev)}<small>${esc(popisPeriody(r.polozka.perioda))}</small></span>
+    .map((r) => {
+      const muj = mujPodilRadku(r);
+      return `<div class="polozka">
+      <span class="nazev">${esc(r.polozka.nazev)}</span>
       <span class="cislo">${formatKc(r.castka)}</span>
-    </div>`,
-    )
+      <small>${esc(popisPeriody(r.polozka.perioda))}${
+        r.polozka.poznamka ? ` · ${esc(r.polozka.poznamka)}` : ''
+      }</small>
+      <small class="cislo ${muj > 0 ? 'moje' : ''}">${muj > 0 ? `z toho já ${formatKc(muj)}` : 'nepodílím se'}</small>
+    </div>`;
+    })
     .join('');
+
+  const mujMesicne = souhrnDomu.radky
+    .filter((r) => !r.jednorazovy)
+    .reduce((a, r) => a + mujPodilRadku(r), 0);
 
   return `<!doctype html>
 <html lang="cs">
@@ -233,7 +248,10 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 .platba:last-child, .polozka:last-child { border-bottom: 0; }
 .kat { position: relative; border-bottom: 0; padding-bottom: 12px; }
 .kat i { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--akcent); opacity: .5; }
-.polozka small { display: block; color: var(--tlumene); font-size: 12.5px; }
+.polozka { grid-template-columns: 1fr auto; }
+.polozka .nazev { font-weight: 550; }
+.polozka small { color: var(--tlumene); font-size: 12.5px; }
+.polozka small.moje { color: var(--akcent); font-weight: 600; }
 .paticka { color: var(--tlumene); font-size: 12px; text-align: center; }
 </style>
 </head>
@@ -288,7 +306,10 @@ h2 { font-size: 15px; margin: 0 0 8px; }
     </div>
     <p class="pozn">Tolik stojí provoz domu za rok — bez ohledu na to, kdo se na čem podílí.</p>
     ${radkyKategorii}
-    <h2 style="margin-top:14px">Z čeho se to skládá</h2>
+    <h2 style="margin-top:16px">Z čeho se to skládá</h2>
+    <div class="rozpis" style="margin-bottom:6px">
+      <span class="soucet">Můj podíl měsíčně</span><span class="cislo soucet">${formatKc(mujMesicne)}</span>
+    </div>
     ${polozkyDomu}
     <p class="pozn">Částky jsou měsíční; roční jsou dvanáctinásobek.</p>
   </section>

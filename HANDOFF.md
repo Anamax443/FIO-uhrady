@@ -2,6 +2,42 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-20 — zálohy, rozpouštění, uzávěrky a osobní přehled
+
+Zadání se upřesnilo do modelu **záloh a vyúčtování** (jako u energií):
+fixní částka na trvalý příkaz, rozdíl proti skutečnosti se srovná při
+vyúčtování a rozpustí do nové zálohy, aby příkaz mohl zůstat fixní.
+Dohodnuté pořadí prací: rozpouštění → zálohy → uzávěrky → roční vyúčtování →
+stránka pro člena → AI.
+
+**Hotovo (1, 2, 3, 5):**
+- **Rozpouštění** — nákup není spotřeba. U položky se zadá, přes kolik měsíců
+  a od kterého se rozpouští (uhlí 42 000 / 12 = 3 500 měsíčně). Mimo své okno
+  položka do nákladů nevstupuje a po doběhnutí zmizí sama.
+- **Kdo zaplatil ze svého** (`zdroj_uhrady`) — komu se částka připíše jako vklad.
+  Bez tohoto rozlišení by se náklad počítal dvakrát: jako výdaj i jako vklad.
+- **Zálohy** (`zalohy`) — fixní měsíční částka, historie se nepřepisuje.
+  Dluh = záloha × měsíce po splatnosti − zaplaceno. Návrh počítá appka
+  (odhad na 12 měsíců + rezerva, výchozí 10 %, nahoru na stovky), **stanoví admin**.
+- **Splatnost** — měsíc se do dluhu započítá až dnem splatnosti (výchozí 20.).
+- **Uzávěrky** (`uzaverky`) — zamrazí náklady, podíly, zálohy i soupis položek.
+  Uzavřený měsíc se z aktuálního nastavení nepřepočítává.
+- **Osobní přehled** `/v/{token}` — mobilní, veřejný na neuhodnutelném odkazu,
+  který se vytvoří v Nastavení u kterékoli osoby. Zbývá doplatit velkým písmem,
+  **QR platba (SPAYD)**, graf podílu po měsících, vlastní platby, náklady domu
+  na rok po kategoriích a **položky s vlastním podílem**. O ostatních nic.
+- **Číslo účtu, IBAN a zůstatek** si appka bere z Fio API, neopisuje se ručně.
+
+**Chyby nalezené a opravené při testování** (všechny by tiše zkreslovaly čísla):
+1. Jednorázové položky se při součtu přes víc měsíců počítaly do každého měsíce.
+2. Stránka Vyrovnání nedostávala uzávěrky, takže zamrazení nefungovalo.
+3. Kategorie ročních nákladů nesouhlasily s celkem (jednorázové × 12).
+4. Uložení beze změny zapisovalo nový záznam do historie.
+
+**Zbývá:** roční vyúčtování (4) a rozpuštění rozdílu do nové zálohy, **AI** (6)
+— čtení účtenek a komentář k vývoji, dál e-maily přes Resend, import CSV
+a Cloudflare Access místo PINu.
+
 ## 2026-08-19 — banka napojená, přihlášení PINem, živý provoz
 
 **https://fio-uhrady.bass443.workers.dev** — commit `fa1e32c`.
