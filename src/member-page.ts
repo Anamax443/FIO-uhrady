@@ -35,6 +35,15 @@ export interface MesicMaDal {
   maPoslat: number;
   /** co za ten měsíc doopravdy přišlo na účet */
   prislo: number;
+  /**
+   * Kolik chybí **od začátku do konce tohohle měsíce**.
+   *
+   * Dluh nevzniká k jednomu měsíci, ale průběžně: jeden měsíc přijde míň,
+   * jiný nic, jiný víc. Bez průběžného zůstatku by z tabulky šlo vyčíst jen
+   * „tenhle měsíc chybělo 3 000" a ne to podstatné — jak na tom člověk je teď.
+   * Kladné = zbývá doplatit, záporné = má předplaceno.
+   */
+  zbyva: number;
   /** je ten měsíc už po splatnosti? do té doby ještě není co dlužit */
   splatny: boolean;
 }
@@ -65,17 +74,18 @@ export function maDalPoMesicich(
   }
 
   const mesice: MesicMaDal[] = [];
+  let zbyva = 0;
   // Běžící měsíc patří do výpisu, i když ještě není splatný — ať je vidět,
   // že se na něj čeká, a ne aby prostě chyběl.
   for (let i = 0; cisloMesice(posunMesic(od, i)) <= cisloMesice(dnes); i++) {
     const mesic = posunMesic(od, i);
     const splatny = i < splatnych;
-    mesice.push({
-      mesic,
-      maPoslat: zalohaVMesici(zalohy, member_id, mesic),
-      prislo: prisloVMesici.get(mesic) ?? 0,
-      splatny,
-    });
+    const maPoslat = zalohaVMesici(zalohy, member_id, mesic);
+    const prislo = prisloVMesici.get(mesic) ?? 0;
+    // Nesplatný měsíc do dluhu nevstupuje, ale platba poslaná dopředu se
+    // započítá hned — jinak by předplacený člověk viděl dluh, který nemá.
+    zbyva += (splatny ? maPoslat : 0) - prislo;
+    mesice.push({ mesic, maPoslat, prislo, zbyva, splatny });
   }
   return mesice;
 }
@@ -261,26 +271,27 @@ export function renderClen(
 
   const radkyMesicu = mesice
     .map((m) => {
-      const stav = !m.splatny
-        ? 'ceka'
-        : m.prislo >= m.maPoslat
-          ? 'ok'
-          : m.prislo > 0
-            ? 'cast'
-            : 'chybi';
-      const popis = !m.splatny
+      // Barva se řídí **průběžným** zůstatkem, ne tím, co přišlo zrovna v tom
+      // měsíci: dluh se přenáší dál a zajímá nás, jak to stojí po něm.
+      const stav = m.zbyva > 0 ? 'chybi' : m.zbyva < 0 ? 'napred' : 'ok';
+      const zaMesic = !m.splatny
         ? 'ještě není splatné'
-        : m.prislo >= m.maPoslat
-          ? 'zaplaceno'
-          : m.prislo > 0
-            ? `chybí ${formatKc(m.maPoslat - m.prislo)}`
-            : 'zatím nepřišlo';
+        : m.prislo === 0
+          ? 'v tomhle měsíci nepřišlo nic'
+          : m.prislo < m.maPoslat
+            ? `poslal${osoba.jmeno.endsWith('a') ? 'a' : ''} jsi míň, než měl${osoba.jmeno.endsWith('a') ? 'a' : ''}`
+            : m.prislo > m.maPoslat
+              ? 'poslané navíc se odečte'
+              : 'sedí';
       const [rok, cislo] = m.mesic.split('-');
       return `<div class="mesic ${stav}">
       <span class="kdy">${Number(cislo)}/${rok?.slice(2) ?? ''}</span>
       <span class="cislo ma">${m.maPoslat === 0 ? '—' : formatKc(m.maPoslat)}</span>
       <span class="cislo dal">${m.prislo === 0 ? '—' : formatKc(m.prislo)}</span>
-      <span class="popis">${popis}</span>
+      <span class="cislo zbyva">${m.zbyva === 0 ? '—' : formatKc(Math.abs(m.zbyva))}</span>
+      <span class="popis">${zaMesic}${
+        m.zbyva < 0 ? ' · po tomhle měsíci máš předplaceno' : ''
+      }</span>
     </div>`;
     })
     .join('');
@@ -347,22 +358,19 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 
 /* měsíc po měsíci — dva sloupce: co měl poslat a co přišlo */
 .hlavicky-mesicu, .mesic {
-  display: grid; grid-template-columns: 54px 1fr 1fr; gap: 1px 8px;
+  display: grid; grid-template-columns: 44px 1fr 1fr 1fr; gap: 1px 6px;
   align-items: baseline; font-variant-numeric: tabular-nums;
 }
-.hlavicky-mesicu { color: var(--tlumene); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; padding-bottom: 4px; border-bottom: 1px solid var(--linka); }
+.hlavicky-mesicu { color: var(--tlumene); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-bottom: 4px; border-bottom: 1px solid var(--linka); }
 .hlavicky-mesicu span:not(:first-child) { text-align: right; }
 .mesic { padding: 7px 0; border-bottom: 1px solid var(--linka); }
-.mesic .kdy { font-family: var(--mono); color: var(--tlumene); font-size: 13.5px; }
-.mesic .ma { color: var(--tlumene); }
-.mesic .dal { font-weight: 600; }
-.mesic .popis { grid-column: 2 / -1; text-align: right; font-size: 12.5px; color: var(--tlumene); }
-.mesic.ok .dal { color: var(--ok); }
-.mesic.chybi .dal, .mesic.cast .dal { color: var(--dluh); }
-.mesic.ok .popis { color: var(--ok); }
-.mesic.chybi .popis, .mesic.cast .popis { color: var(--dluh); }
-.mesic.ceka { opacity: .62; }
-.soucty { display: grid; grid-template-columns: 54px 1fr 1fr; gap: 2px 8px; padding-top: 8px; font-variant-numeric: tabular-nums; }
+.mesic .kdy { font-family: var(--mono); color: var(--tlumene); font-size: 13px; }
+.mesic .ma, .mesic .dal { color: var(--tlumene); font-size: 14px; }
+.mesic .zbyva { font-weight: 650; }
+.mesic .popis { grid-column: 1 / -1; text-align: right; font-size: 12.5px; color: var(--tlumene); }
+.mesic.chybi .zbyva { color: var(--dluh); }
+.mesic.napred .zbyva, .mesic.ok .zbyva { color: var(--ok); }
+.soucty { display: grid; grid-template-columns: 44px 1fr 1fr 1fr; gap: 2px 6px; padding-top: 8px; font-variant-numeric: tabular-nums; }
 .soucty .cislo { text-align: right; }
 .soucty .celkem { font-weight: 650; }
 .doplnek { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--linka); font-variant-numeric: tabular-nums; }
@@ -429,7 +437,7 @@ h2 { font-size: 15px; margin: 0 0 8px; }
   </div>
 
   <section class="karta stav">
-    <div class="popis">${dluzi ? 'Zbývá doplatit' : radek.rozdil < 0 ? 'Máš předplaceno' : 'Vyrovnáno'}</div>
+    <div class="popis">${dluzi ? 'Zbývá doplatit celkem' : radek.rozdil < 0 ? 'Máš předplaceno' : 'Vyrovnáno'}</div>
     <div class="velke ${dluzi ? 'dluh' : 'ok'}">${formatKc(Math.abs(radek.rozdil))}</div>
     <div class="pod">
       Záloha <b>${formatKc(radek.zaloha)}</b> měsíčně${
@@ -448,13 +456,14 @@ h2 { font-size: 15px; margin: 0 0 8px; }
   <section class="karta">
     <h2>Měsíc po měsíci</h2>
     <div class="hlavicky-mesicu">
-      <span>Měsíc</span><span>Má poslat</span><span>Přišlo</span>
+      <span>Měsíc</span><span>Má poslat</span><span>Přišlo</span><span>Zbývá</span>
     </div>
     ${radkyMesicu || '<p class="pozn">Sledování ještě nezačalo.</p>'}
     <div class="soucty">
       <span class="celkem">Celkem</span>
       <span class="cislo celkem">${formatKc(soucetMa)}</span>
       <span class="cislo celkem">${formatKc(soucetDal)}</span>
+      <span class="cislo celkem">${formatKc(Math.abs(soucetMa - soucetDal))}</span>
     </div>
     <div class="doplnek">
       ${
@@ -473,9 +482,14 @@ h2 { font-size: 15px; margin: 0 0 8px; }
       <span class="cislo vysledek">${formatKc(Math.abs(radek.rozdil))}</span>
     </div>
     <p class="pozn">
-      „Má poslat" je záloha platná v tom měsíci, „Přišlo" je to, co v něm dorazilo na účet.
-      Platba za minulý měsíc, která přijde se zpožděním, se ukáže u měsíce, kdy doopravdy přišla.
-      Běžící měsíc se do dluhu počítá až dnem splatnosti.
+      <b>„Zbývá" se přenáší z měsíce na měsíc</b> — dluh nevzniká k jednomu měsíci, ale
+      průběžně. Když jeden měsíc přijde míň, chybějící část se přičte k dalšímu; když přijde
+      víc, o to se dluh sníží. Poslední řádek proto říká, jak na tom jsi <b>teď</b>.
+    </p>
+    <p class="pozn">
+      „Má poslat" je záloha platná v tom měsíci, „Přišlo" to, co v něm dorazilo na účet.
+      Běžící měsíc se do dluhu počítá až dnem splatnosti, ale platba poslaná dopředu se
+      započítá hned.
     </p>
     <div class="prokliky">
       <button class="tlacitko" type="button" data-otevri="s-platby">Moje platby</button>
