@@ -3,7 +3,7 @@
 > Kde to stojí **dnes**. Historie a rozhodnutí jsou v [HANDOFF.md](../HANDOFF.md),
 > tenhle dokument se přepisuje. Anglicky: [STATUS.en.md](STATUS.en.md).
 
-**Stav k 2026-08-21 · živě `ZIVY_HASH` · <https://fio-uhrady.bass443.workers.dev>**
+**Stav k 2026-08-21 · živě `919fa20` · <https://fio-uhrady.bass443.workers.dev>**
 
 ## K čemu to je
 
