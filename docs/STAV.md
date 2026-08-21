@@ -27,7 +27,8 @@ srovná zálohy se skutečností.
 | Osobní přehled pro člena | ✅ | `/v/{token}`, průběžný zůstatek, QR platba, texty z Nastavení |
 | Audit a historie změn | ✅ | žádný zápis bez záznamu; vlastní stránka se starou → novou hodnotou |
 | AI vrstva | ✅ | přepínatelný backend, klíč ke Claude se vkládá v Nastavení; při selhání placeného zaskočí free |
-| Dotazy pro AI | ✅ | okno na Nákladech domu; čísla počítá appka, věta s cizím číslem se označí ⚠ |
+| Dotazy pro AI | ✅ | okno v liště na každé stránce; umí i vykreslit graf — model vybere co, čísla dodá appka |
+| Výběr modelu | ✅ | v Nastavení, výchozí Llama 3.3 70B zdarma; nejmenší model si u dotazů vymýšlí čísla |
 | Přihlášení | ✅ | PIN (PBKDF2 + zámek po chybách); Cloudflare Access má přednost |
 
 ## Co ještě není

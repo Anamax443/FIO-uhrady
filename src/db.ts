@@ -39,6 +39,8 @@ export interface Nastaveni {
   texty: Record<string, string>;
   /** '' | 'workers-ai' | 'anthropic' | 'off' — který AI backend se použije */
   ai_provider: string;
+  /** id modelu z AI_MODELY; prázdné = výchozí model zvoleného backendu */
+  ai_model: string;
   /** poslední komentář k vývoji nákladů (JSON, viz komentar.ts); null = ještě nebyl */
   ai_komentar: string | null;
 }
@@ -736,6 +738,7 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     texty: slozTexty(mapa),
     // Prázdné = auto, tedy zdarma. Appka sama nikdy neutrácí.
     ai_provider: mapa.get('ai_provider') ?? '',
+    ai_model: mapa.get('ai_model') ?? '',
     ai_komentar: mapa.get('ai_komentar') ?? null,
   };
 }

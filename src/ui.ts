@@ -166,6 +166,15 @@ dialog.okno .panehead .zavrit { margin-left: auto; height: 20px; }
 .dotaz-blok .veta.nejiste { color: var(--warn); }
 .dotaz-blok .veta.nejiste::before { content: "⚠ "; }
 .dotaz-blok .zdroj-odpovedi { color: var(--text-faint); font-size: 11.5px; }
+/* Graf v odpovědi. Čísla do něj počítá aplikace, model vybral jen, co ukázat. */
+.dotaz-graf { display: flex; flex-direction: column; gap: 6px; margin-top: 3px; padding: 8px 9px; border: 1px solid var(--border-soft); border-radius: 2px; background: var(--chrome-hi); }
+.dotaz-graf .nadpis { font-weight: 600; }
+.dotaz-graf .nadpis small { display: block; font-weight: 400; color: var(--text-faint); }
+.dotaz-graf .radek { display: grid; grid-template-columns: minmax(90px, 34%) minmax(0, 1fr) auto; gap: 2px 9px; align-items: center; font-variant-numeric: tabular-nums; }
+.dotaz-graf .radek .popis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dotaz-graf .radek .pruh { position: relative; height: 11px; background: var(--chrome); border-radius: 2px; overflow: hidden; }
+.dotaz-graf .radek .pruh i { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .8; border-radius: 2px; }
+.dotaz-graf .radek .castka { font-family: var(--mono); font-size: 11.5px; }
 
 .hlaska { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--border); }
 /* Bez tohohle „display: flex" přebije [hidden] z prohlížeče a schovaná hláška
@@ -433,9 +442,9 @@ ${SYMBOLY}
   <div class="telo">
     <div class="dotaz-zadani">
       <label for="ai-otazka">Na co se chceš zeptat?</label>
-      <textarea id="ai-otazka" maxlength="500" placeholder="Třeba: Kolik měsíčně padne na energie? Proč je máma v mínusu? Která položka je největší?"></textarea>
+      <textarea id="ai-otazka" maxlength="500" placeholder="Třeba: Kolik měsíčně padne na energie? Vykresli graf nákladů. Proč je máma v mínusu?" title="Enter odešle, Shift+Enter udělá nový řádek"></textarea>
       <div class="dotaz-lista">
-        <button class="btn primary" type="button" id="ai-poslat" title="Odeslat dotaz (Ctrl+Enter)">Zeptat se</button>
+        <button class="btn primary" type="button" id="ai-poslat" title="Odeslat dotaz (Enter; Shift+Enter udělá nový řádek)">Zeptat se</button>
         <span class="note" id="ai-stav-dotazu"></span>
       </div>
     </div>
@@ -478,7 +487,9 @@ document.getElementById('t-dotaz').addEventListener('click', () => {
 });
 document.getElementById('ai-zavrit').addEventListener('click', () => dotazOkno.close());
 dotazPrvek('ai-otazka').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void dotazPosli(); }
+  // Enter odesílá, Shift+Enter dělá nový řádek — dotaz je většinou jedna věta
+  // a sahat po Ctrl+Enter u každé otázky nedává smysl.
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void dotazPosli(); }
 });
 dotazPrvek('ai-poslat').addEventListener('click', () => void dotazPosli());
 
@@ -505,6 +516,48 @@ function dotazPridej(otazka, data) {
     odpoved.appendChild(veta);
   }
   blok.appendChild(odpoved);
+
+  // Graf sestavila aplikace z vlastních čísel — model rozhodl jen, co ukázat.
+  if (data.graf && (data.graf.radky || []).length > 0) {
+    const graf = document.createElement('div');
+    graf.className = 'dotaz-graf';
+
+    const nadpis = document.createElement('span');
+    nadpis.className = 'nadpis';
+    nadpis.textContent = data.graf.titulek;
+    const pod = document.createElement('small');
+    pod.textContent = data.graf.poznamka + ' · čísla počítá aplikace, ne model';
+    nadpis.appendChild(pod);
+    graf.appendChild(nadpis);
+
+    const max = Math.max.apply(null, data.graf.radky.map((r) => Math.abs(r.hodnota)).concat([1]));
+    for (const r of data.graf.radky) {
+      const radek = document.createElement('div');
+      radek.className = 'radek';
+
+      const popis = document.createElement('span');
+      popis.className = 'popis';
+      popis.textContent = r.popis;
+      popis.title = r.popis;
+      radek.appendChild(popis);
+
+      const pruh = document.createElement('div');
+      pruh.className = 'pruh';
+      const vypln = document.createElement('i');
+      // Nula ať je pořád řádek, ne prázdno — jinak vypadá, že data chybí.
+      vypln.style.width = Math.max(1, Math.round((Math.abs(r.hodnota) / max) * 100)) + '%';
+      pruh.appendChild(vypln);
+      radek.appendChild(pruh);
+
+      const castka = document.createElement('span');
+      castka.className = 'castka';
+      castka.textContent = r.text;
+      radek.appendChild(castka);
+
+      graf.appendChild(radek);
+    }
+    blok.appendChild(graf);
+  }
 
   const zdroj = document.createElement('span');
   zdroj.className = 'zdroj-odpovedi';

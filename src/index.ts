@@ -8,10 +8,10 @@
  * Rozvržení cest viz README.md, pravidla párování viz docs/ARCHITECTURE.md.
  */
 import { renderNaklady } from './admin-page.js';
-import { AI_VOLBY, ctxAi, popisBackendu } from './ai.js';
+import { AI_MODELY, AI_VOLBY, ctxAi, popisBackendu } from './ai.js';
 import { dobehniAutomatiku, kdyZavreMesic } from './automat.js';
 import { podkladKomentare, zhodnotVyvoj } from './komentar.js';
-import { odpovezNaDotaz, podkladDotazu } from './dotaz.js';
+import { odpovezNaDotaz, podkladDotazu, sestavGraf } from './dotaz.js';
 import {
   kdoZeCookie,
   maPin,
@@ -276,8 +276,8 @@ async function stavVyrovnani(db: D1Database) {
  * AI kontext i s klíčem uloženým v Nastavení. Klíč se nesmí dostat do
  * `Nastaveni` (to jde do stránky), proto se čte zvlášť až tady.
  */
-async function kontextAi(env: Env, volba: string) {
-  return ctxAi(env, volba, await nactiClaudeKlic(env.DB));
+async function kontextAi(env: Env, volba: string, model = '') {
+  return ctxAi(env, volba, await nactiClaudeKlic(env.DB), model);
 }
 
 async function telo(request: Request): Promise<unknown> {
@@ -796,10 +796,14 @@ export default {
         }
 
         if (request.method === 'POST' && path === '/api/ai') {
-          const d = (await telo(request)) as { provider?: string };
+          const d = (await telo(request)) as { provider?: string; model?: string };
           const volba = String(d.provider ?? '').trim().toLowerCase();
           if (!(AI_VOLBY as readonly string[]).includes(volba)) {
             throw new ChybaVstupu('Neznámá volba backendu.');
+          }
+          const model = String(d.model ?? '').trim();
+          if (model !== '' && !AI_MODELY.some((m) => m.id === model)) {
+            throw new ChybaVstupu('Neznámý model. Vyber ho ze seznamu v Nastavení.');
           }
           await ulozNastaveni(
             env.DB,
@@ -808,6 +812,13 @@ export default {
             kdo,
             `AI backend: ${volba === '' ? 'automaticky (zdarma)' : volba}`,
           );
+          await ulozNastaveni(
+            env.DB,
+            'ai_model',
+            model,
+            kdo,
+            `AI model: ${model === '' ? 'výchozí pro zvolený backend' : model}`,
+          );
           return json({ ok: true });
         }
 
@@ -815,11 +826,14 @@ export default {
           const s = await stavVyrovnani(env.DB);
           // Modelu jdou jen náklady domu — žádná jména, žádná čísla účtů.
           const podklad = podkladKomentare(s.prehled, s.uzaverky);
-          const vysledek = await zhodnotVyvoj(await kontextAi(env, s.nastaveni.ai_provider), podklad);
+          const vysledek = await zhodnotVyvoj(
+            await kontextAi(env, s.nastaveni.ai_provider, s.nastaveni.ai_model),
+            podklad,
+          );
           // Když zaskočil free backend za placený, musí to být vidět i u uloženého
           // komentáře — jinak vypadá stejně jako ten, o který si člověk řekl.
           const cim =
-            popisBackendu(vysledek.backend) +
+            popisBackendu(vysledek.backend, vysledek.model) +
             (vysledek.zaskok ? ' (zaskok za placený backend, ten selhal)' : '');
           const ulozit = JSON.stringify({
             shrnuti: vysledek.data.shrnuti,
@@ -858,14 +872,20 @@ export default {
             s.nastaveni.vyuctovani_od,
           );
           const vysledek = await odpovezNaDotaz(
-            await kontextAi(env, s.nastaveni.ai_provider),
+            await kontextAi(env, s.nastaveni.ai_provider, s.nastaveni.ai_model),
             podklad,
             String(d.otazka ?? ''),
           );
+          // Graf staví aplikace ze svých čísel; model rozhodl jen o tom, co ukázat.
+          const graf =
+            vysledek.data.graf === null
+              ? null
+              : sestavGraf(vysledek.data.graf, s.prehled, s.uzaverky);
           return json({
             ok: true,
             vety: vysledek.data.vety,
-            backend: popisBackendu(vysledek.backend),
+            graf,
+            backend: popisBackendu(vysledek.backend, vysledek.model),
             zaskok: vysledek.zaskok ?? null,
           });
         }

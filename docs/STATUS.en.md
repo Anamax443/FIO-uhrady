@@ -29,7 +29,8 @@ fixed advances against reality.
 | Member's personal view | ✅ | `/v/{token}`, running balance, QR payment, wording from Settings |
 | Audit trail and change history | ✅ | no write without a record; its own page showing old → new values |
 | AI layer | ✅ | switchable backend; the Claude key is entered in Settings, and the free backend stands in when the paid one fails |
-| Asking the AI | ✅ | a window on House costs; the app does the arithmetic, a sentence with a number not in the briefing is flagged ⚠ |
+| Asking the AI | ✅ | a window in the title bar on every page; it can draw a chart too — the model picks what, the app supplies the numbers |
+| Model choice | ✅ | in Settings, Llama 3.3 70B free by default; the smallest model invents numbers when asked about the table |
 | Sign-in | ✅ | PIN (PBKDF2 + lockout); Cloudflare Access takes precedence |
 
 ## What is not there yet

@@ -2,6 +2,54 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — model se vybírá, graf se kreslí, Enter odesílá
+
+**Špatné odpovědi měly tři různé příčiny** a stálo za to je oddělit:
+
+1. **Model se vymlouval.** Podklad končil větou „na otázky na ně odpověz, že takové
+   údaje k dispozici nemáš" a malý model si z ní udělal univerzální výmluvu — na
+   „vykresli graf nákladů" recitoval čísla účtů a variabilní symboly, které s grafem
+   nemají nic společného. Pravidlo je teď úzké a váže se jen na ty konkrétní údaje.
+2. **Nikde nestálo, co model umí.** Systémový prompt říkal jen, co nesmí.
+3. **8B model si vymýšlí.** Na „kolik platí máma" vrátil rozpad 2 000 + 350 + 205 Kč,
+   který v datech vůbec není. Pojistka `jenOverenaCisla` to chytila, ale odpověď
+   s ⚠ je pořád k ničemu.
+
+**Model se vybírá v Nastavení** (`AI_MODELY` v `src/ai.ts`, nastavení `ai_model`) —
+vzor převzatý z appky na hodnocení hráčů, která to má vyřešené stejně. Nabídka je
+v kódu vidět a dá se opravit jedním commitem; co účet umí, vypíše `npx wrangler ai
+models`. **Výchozí je nově Llama 3.3 70B**, taky zdarma: nejmenší model tu nešetří,
+jen se plete. Když uložená volba nepatří ke zvolenému backendu, vezme se výchozí
+model toho backendu — jinak by volání spadlo na neznámém ID. Uvažující model
+(`gpt-oss-120b`) dostává čtyřnásobný strop tokenů, protože vnitřní úvaha se do
+`max_tokens` počítá a jinak nezbude na odpověď.
+
+**Graf appka opravdu nakreslí.** Uživatel to řekl přesně: *„nejde mi o to, aby se
+vymluvil, ale aby to udělal."* Model proto vybírá **jen co zobrazit** (`"graf":
+"kategorie" | "polozky" | "osoby" | "vyvoj"`) a **čísla dodá aplikace** ze svých dat
+(`sestavGraf`). Kdyby čísla dodával model, platila by o nich stejná nedůvěra jako
+o větách a graf by nešlo ukázat vůbec. Slabší modely to pole vynechávají, takže je
+tu ještě záchrana podle znění dotazu (`zvolenyGraf`) — kdo si řekne o graf, dostane ho.
+
+**Graf „osoby" sčítá s dětmi.** Napřed rozepisoval každého zvlášť, ale věta od modelu
+mluvila o mámě včetně Elišky (6 488 Kč) a graf ukazoval mámu samotnou (3 497 Kč).
+Text a obrázek si musí odpovídat, jinak čtenář neví, které číslo platí.
+
+**Prompt rozlišuje tři pojmy**, které model slévá do jednoho: *podíl* (co na člověka
+připadá), *vloženo* (co reálně dal) a *kredit* (rozdíl). „Kolik platí máma" je otázka
+na vložené peníze — odpovědět podílem je zavádějící.
+
+**Enter odesílá**, Shift+Enter dělá nový řádek. Ctrl+Enter u každé otázky nedávalo smysl.
+
+**Opraveno u toho:** `prvniJson` padalo na `telo.indexOf is not a function` — 70B model
+nevrací `response` jako řetězec, ale rovnou objekt. Nová `prvniJson` bere `unknown`
+a objekt propustí rovnou.
+
+**Ověřeno proti běžícímu Workeru** (Llama 3.3 70B): „vykresli graf nákladů" →
+nakreslený graf Energie 12 200 / Dům 1 124 / Služby 802 Kč, sedí na tabulku ·
+„kolik padne na energie" → 12 200 Kč · „graf vývoje v čase" → správně řekne, že
+není uzavřený žádný měsíc, a graf nekreslí.
+
 ## 2026-08-21 — detail na vyžádání, dotazy pro AI a klíč ke Claude v Nastavení
 
 **Kredit mámy ověřen** nezávislým přepočtem proti ostré databázi (kontrola: dědových

@@ -22,17 +22,67 @@ export type AiBackend = 'workers-ai' | 'anthropic';
 export const AI_VOLBY = ['', 'workers-ai', 'anthropic', 'off'] as const;
 
 /**
- * Malý instruct model. JSON se vynucuje promptem — free backend nemá structured
- * outputs. 8B je levné na neurony, takže se komentář vejde do free tarifu.
+ * Modely nabízené v Nastavení. Cloudflare katalog průběžně mění a vyřazuje,
+ * takže seznam je vidět tady a dá se opravit jedním commitem; co účet zrovna
+ * umí, vypíše `npx wrangler ai models`.
+ *
+ * **Model se volí, nededí se.** Na dotazy nad tabulkou je 8B model prokazatelně
+ * slabý — na „kolik platí máma" si vymyslel rozpad 2 000 + 350 + 205 Kč,
+ * který v datech není. Proto je výchozí 70B.
  */
-export const MODEL_ZDARMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
+export interface AiModel {
+  id: string;
+  backend: AiBackend;
+  popis: string;
+  /** „přemýšlí nahlas" — vnitřní úvaha se počítá do max_tokens, potřebuje strop navíc */
+  uvazuje?: boolean;
+}
 
-/** Model pro placený backend. Haiku stačí a je nejlevnější. */
-export const MODEL_CLAUDE = 'claude-haiku-4-5-20251001';
+export const AI_MODELY: AiModel[] = [
+  {
+    id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    backend: 'workers-ai',
+    popis: 'Llama 3.3 70B — výchozí: nejlepší poměr přesnosti a rychlosti, zdarma',
+  },
+  {
+    id: '@cf/meta/llama-3.1-8b-instruct-fp8',
+    backend: 'workers-ai',
+    popis: 'Llama 3.1 8B — nejlevnější na neurony, ale u dotazů nad tabulkou si vymýšlí čísla',
+  },
+  {
+    id: '@cf/openai/gpt-oss-120b',
+    backend: 'workers-ai',
+    popis: 'gpt-oss 120B — nejsilnější zdarma, uvažuje nahlas (pomalejší, žere strop tokenů)',
+    uvazuje: true,
+  },
+  { id: 'claude-opus-5', backend: 'anthropic', popis: 'Claude Opus 5 — nejlepší, placený' },
+  { id: 'claude-sonnet-5', backend: 'anthropic', popis: 'Claude Sonnet 5 — levnější než Opus, placený' },
+  {
+    id: 'claude-haiku-4-5-20251001',
+    backend: 'anthropic',
+    popis: 'Claude Haiku 4.5 — nejlevnější Claude, na tyhle dotazy bohatě stačí',
+  },
+];
+
+/** Výchozí model backendu — první v seznamu, který k němu patří. */
+export const vychoziModel = (b: AiBackend): string =>
+  AI_MODELY.find((m) => m.backend === b)?.id ?? (AI_MODELY[0] as AiModel).id;
+
+/**
+ * Model pro daný backend. Když uložená volba patří jinému backendu (typicky
+ * po přepnutí Workers AI ↔ Claude), vezme se výchozí — jinak by volání spadlo
+ * na neznámém ID.
+ */
+export function modelProBackend(zvoleny: string | undefined, b: AiBackend): string {
+  const model = AI_MODELY.find((m) => m.id === zvoleny);
+  return model?.backend === b ? model.id : vychoziModel(b);
+}
 
 export interface AiKontext {
   /** '' | 'workers-ai' | 'anthropic' | 'off' */
   volba: string;
+  /** id modelu z `AI_MODELY`; prázdné = výchozí pro zvolený backend */
+  model?: string;
   /** Workers AI binding — free backend */
   ai?: Ai;
   /** ANTHROPIC_API_KEY — placený backend */
@@ -67,14 +117,16 @@ export function ctxAi(
   volba: string,
   /** klíč vložený v Nastavení; má přednost před secretem z prostředí */
   klicZNastaveni: string | null = null,
+  model = '',
 ): AiKontext {
-  return { volba: volba ?? '', ai: env.AI, klic: klicZNastaveni ?? env.ANTHROPIC_API_KEY };
+  return { volba: volba ?? '', model, ai: env.AI, klic: klicZNastaveni ?? env.ANTHROPIC_API_KEY };
 }
 
 /** Lidský štítek do hlavičky a do logu — ať je poznat, čím se to počítalo. */
-export function popisBackendu(b: AiBackend | null): string {
-  if (b === 'workers-ai') return 'Cloudflare Workers AI (zdarma)';
-  if (b === 'anthropic') return 'Claude (placené)';
+export function popisBackendu(b: AiBackend | null, model?: string): string {
+  const jmeno = model ? ' · ' + model : '';
+  if (b === 'workers-ai') return 'Cloudflare Workers AI (zdarma)' + jmeno;
+  if (b === 'anthropic') return 'Claude (placené)' + jmeno;
   return 'AI vypnutá';
 }
 
@@ -100,7 +152,11 @@ export function popisVolby(volba: string, maFree: boolean, maKlic: boolean): str
 }
 
 /** Vytáhne první úplný JSON objekt z textu (model ho rád obalí prózou nebo ```). */
-export function prvniJson<T>(text: string): T | null {
+export function prvniJson<T>(vstup: unknown): T | null {
+  // Některé modely nevrací `response` jako řetězec, ale rovnou objekt.
+  // Bez tohohle spadne `.indexOf` a chyba vypadá jako rozbitý backend.
+  if (vstup !== null && typeof vstup === 'object') return vstup as T;
+  const text = String(vstup ?? '');
   const vBlok = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
   const telo = vBlok?.[1] ?? text;
   const zacatek = telo.indexOf('{');
@@ -116,23 +172,38 @@ export function prvniJson<T>(text: string): T | null {
 export class ChybaAi extends Error {}
 
 /** Zavolá free backend a vrátí naparsovaný JSON. */
-async function zdarma<T>(ai: Ai, system: string, user: string, maxTokens: number): Promise<T> {
+async function zdarma<T>(
+  ai: Ai,
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+): Promise<T> {
   const sys = `${system}\n\nOdpověz VÝHRADNĚ jedním JSON objektem podle popisu — bez markdownu, bez úvodní věty, bez komentáře.`;
-  const odpoved = (await ai.run(MODEL_ZDARMA, {
+  // Uvažující model spotřebuje strop vnitřní úvahou a na odpověď mu nezbude;
+  // vrátí prázdno a vypadá to jako chyba backendu.
+  const strop = AI_MODELY.find((m) => m.id === model)?.uvazuje === true ? maxTokens * 4 : maxTokens;
+  const odpoved = (await ai.run(model as Parameters<Ai['run']>[0], {
     temperature: 0,
-    max_tokens: maxTokens,
+    max_tokens: strop,
     messages: [
       { role: 'system', content: sys },
       { role: 'user', content: user },
     ],
-  })) as { response?: string };
+  } as never)) as { response?: unknown };
   const objekt = prvniJson<T>(odpoved.response ?? '');
-  if (objekt === null) throw new ChybaAi('Workers AI nevrátila JSON.');
+  if (objekt === null) throw new ChybaAi('Model ' + model + ' nevrátil JSON.');
   return objekt;
 }
 
 /** Zavolá placený backend a vrátí naparsovaný JSON. */
-async function placene<T>(klic: string, system: string, user: string, maxTokens: number): Promise<T> {
+async function placene<T>(
+  klic: string,
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+): Promise<T> {
   const odpoved = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -141,7 +212,7 @@ async function placene<T>(klic: string, system: string, user: string, maxTokens:
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: MODEL_CLAUDE,
+      model,
       max_tokens: maxTokens,
       temperature: 0,
       system: `${system}\n\nOdpověz výhradně jedním JSON objektem podle popisu.`,
@@ -150,7 +221,7 @@ async function placene<T>(klic: string, system: string, user: string, maxTokens:
   });
   if (!odpoved.ok) {
     const telo = (await odpoved.text().catch(() => '')).slice(0, 300);
-    throw new ChybaAi(`Claude odpověděl ${odpoved.status}. ${telo}`);
+    throw new ChybaAi(`Claude (${model}) odpověděl ${odpoved.status}. ${telo}`);
   }
   const data = (await odpoved.json()) as { content?: { type: string; text?: string }[] };
   const text = (data.content ?? []).map((c) => c.text ?? '').join('');
@@ -162,6 +233,8 @@ async function placene<T>(klic: string, system: string, user: string, maxTokens:
 export interface VysledekAi<T> {
   data: T;
   backend: AiBackend;
+  /** id modelu, který odpověděl — bez něj nejde poznat, čím se to počítalo */
+  model?: string;
   /**
    * Proč nevyšel backend, který měl odpovědět jako první. Prázdné, když se
    * povedlo napoprvé.
@@ -192,15 +265,20 @@ export async function zeptejSe<T>(
   }
 
   const potize: string[] = [];
+  let pouzityModel = '';
   for (const backend of poradi) {
     try {
+      const model = modelProBackend(k.model, backend);
       const data =
         backend === 'workers-ai'
-          ? await zdarma<T>(k.ai as Ai, system, user, maxTokens)
-          : await placene<T>(k.klic as string, system, user, maxTokens);
+          ? await zdarma<T>(k.ai as Ai, model, system, user, maxTokens)
+          : await placene<T>(k.klic as string, model, system, user, maxTokens);
       // Když se to povedlo až napodruhé, musí to být vidět — jinak vypadá
       // odpověď ze záskoku stejně jako ta, o kterou si člověk řekl.
-      return potize.length > 0 ? { data, backend, zaskok: potize.join(' · ') } : { data, backend };
+      pouzityModel = model;
+      return potize.length > 0
+        ? { data, backend, model: pouzityModel, zaskok: potize.join(' · ') }
+        : { data, backend, model: pouzityModel };
     } catch (err) {
       potize.push(`${popisBackendu(backend)}: ${err instanceof Error ? err.message : String(err)}`);
     }

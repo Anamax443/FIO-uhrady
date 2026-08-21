@@ -7,7 +7,7 @@
  */
 import type { Nastaveni } from './db.js';
 import type { Osoba } from './model.js';
-import { popisVolby } from './ai.js';
+import { AI_MODELY, popisVolby } from './ai.js';
 import { TEXTY } from './texty.js';
 import { esc, shell } from './ui.js';
 
@@ -164,7 +164,7 @@ export function renderNastaveni(
     sledovani: 'Sledování příspěvků uloženo.',
     token: 'Token do Fio uložen. Další stažení pohybů ho použije.',
     texty: 'Texty uloženy. QR i osobní přehled je od teď používají.',
-    ai: 'Backend pro AI uložen.',
+    ai: 'Backend i model pro AI uloženy.',
     klic: 'Klíč ke Claude uložen. Placený backend ho použije, až si ho vybereš.',
     'klic-smazan': 'Klíč ke Claude smazán. AI běží dál zdarma přes Workers AI.',
   };
@@ -305,9 +305,24 @@ export function renderNastaveni(
             <option value="anthropic"${nastaveni.ai_provider === 'anthropic' ? ' selected' : ''}>placený Claude</option>
             <option value="off"${nastaveni.ai_provider === 'off' ? ' selected' : ''}>vypnuto</option>
           </select>
-          <button class="btn primary" type="button" id="ulozit-ai" title="Uloží volbu backendu">Uložit</button>
+          <label for="ai-model">Model</label>
+          <select id="ai-model">
+            <option value=""${nastaveni.ai_model === '' ? ' selected' : ''}>výchozí pro zvolený backend</option>
+            ${AI_MODELY.map(
+              (m) =>
+                `<option value="${esc(m.id)}"${nastaveni.ai_model === m.id ? ' selected' : ''}>${esc(m.popis)}</option>`,
+            ).join('')}
+          </select>
+          <button class="btn primary" type="button" id="ulozit-ai" title="Uloží backend i model">Uložit</button>
           <span class="note" id="ai-stav"></span>
         </div>
+        <p class="vysvetleni note">
+          Model se vybírá zvlášť od backendu. <b>Na dotazy nad tabulkou není nejmenší model
+          nejlevnější, jen se plete</b> — Llama 3.1 8B si na dotaz „kolik platí máma"
+          vymyslela rozpad, který v datech není. Proto je výchozí Llama 3.3 70B, taky zdarma.
+          Když vybraný model nepatří ke zvolenému backendu, použije se výchozí model toho
+          backendu — volání by jinak spadlo na neznámém ID.
+        </p>
         <p class="vysvetleni note">${esc(popisVolby(nastaveni.ai_provider, maAi, maKlicAi))}</p>
 
         <div class="tokenradek">
@@ -470,7 +485,10 @@ el('ulozit-texty').addEventListener('click', async () => {
 
 el('ulozit-ai').addEventListener('click', async () => {
   el('ai-stav').textContent = 'ukládám…';
-  const vysledek = await posli('/api/ai', { provider: el('ai-provider').value });
+  const vysledek = await posli('/api/ai', {
+    provider: el('ai-provider').value,
+    model: el('ai-model').value,
+  });
   if (vysledek.ok) { znovu('ai'); return; }
   el('ai-stav').textContent = vysledek.chyba;
 });
