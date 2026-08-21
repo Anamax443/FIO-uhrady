@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIO-uhrady — management summary</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2331628c'/%3E%3Crect x='8' y='10' width='16' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='8' y='17' width='11' height='3' rx='1.5' fill='%23fff'/%3E%3C/svg%3E" />
+<style>
+@page { size: A4 portrait; margin: 14mm 15mm; }
+
+:root {
+  --text: #16202a; --tlumene: #5a6572; --linka: #d5dbe2;
+  --akcent: #31628c; --akcent-slabe: #eef3f8;
+  --ok: #3d7f4c; --ceka: #96700d;
+  --ui: "Segoe UI", -apple-system, system-ui, "Helvetica Neue", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 14mm 15mm; background: #fff; color: var(--text);
+  font-family: var(--ui); font-size: 9.6pt; line-height: 1.42;
+  width: 210mm; min-height: 297mm;
+}
+@media screen {
+  body { box-shadow: 0 2px 18px rgba(20, 30, 40, .18); margin-block: 24px; }
+  html { background: #eceff2; }
+}
+
+.hlava { display: flex; justify-content: space-between; align-items: flex-start; gap: 12mm; border-bottom: 2.5px solid var(--akcent); padding-bottom: 3mm; margin-bottom: 4mm; }
+h1 { font-size: 17pt; margin: 0 0 1mm; letter-spacing: -.01em; }
+.perex { margin: 0; color: var(--tlumene); font-size: 10pt; }
+.meta { text-align: right; color: var(--tlumene); font-size: 8pt; white-space: nowrap; line-height: 1.5; }
+.meta b { color: var(--text); }
+
+h2 { font-size: 10.5pt; margin: 4.5mm 0 1.5mm; color: var(--akcent); text-transform: uppercase; letter-spacing: .06em; }
+p { margin: 0 0 2mm; }
+
+.dlazdice { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5mm; margin: 2mm 0 1mm; }
+.dl { border: 1px solid var(--linka); border-radius: 2mm; padding: 2.5mm 3mm; }
+.dl .cislo { font-size: 15pt; font-weight: 700; line-height: 1.15; color: var(--akcent); }
+.dl .popis { color: var(--tlumene); font-size: 8pt; }
+
+.tok { display: flex; align-items: stretch; gap: 0; margin: 2mm 0 1mm; }
+.tok .uzel { flex: 1; border: 1px solid var(--linka); border-radius: 2mm; padding: 2.5mm; text-align: center; background: var(--akcent-slabe); }
+.tok .uzel b { display: block; font-size: 9pt; }
+.tok .uzel span { color: var(--tlumene); font-size: 7.6pt; }
+.tok .sip { display: flex; align-items: center; padding: 0 1.5mm; color: var(--akcent); font-size: 13pt; }
+
+.dva { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+ul { margin: 0 0 2mm; padding-left: 4.5mm; }
+li { margin-bottom: 1.2mm; }
+
+table { border-collapse: collapse; width: 100%; font-size: 8.8pt; }
+th, td { text-align: left; padding: 1.4mm 2mm; border-bottom: 1px solid var(--linka); vertical-align: top; }
+th { color: var(--tlumene); font-size: 7.6pt; text-transform: uppercase; letter-spacing: .05em; }
+td.stav { white-space: nowrap; font-weight: 600; }
+.hotovo { color: var(--ok); }
+.planovano { color: var(--ceka); }
+
+.zvyrazneni { border-left: 3px solid var(--akcent); background: var(--akcent-slabe); padding: 2.5mm 3.5mm; border-radius: 0 2mm 2mm 0; margin: 2mm 0; }
+.zvyrazneni b { color: var(--akcent); }
+
+.paticka { margin-top: 5mm; padding-top: 2mm; border-top: 1px solid var(--linka); color: var(--tlumene); font-size: 7.6pt; display: flex; justify-content: space-between; gap: 6mm; }
+</style>
+</head>
+<body>
+
+<div class="hlava">
+  <div>
+    <h1>FIO-uhrady</h1>
+    <p class="perex">Automated cost allocation and reconciliation of payments against a bank account.</p>
+  </div>
+  <div class="meta">
+    Management summary<br />
+    Status as of <b>21 Aug 2026</b><br />
+    Version <b>b332ced</b> · in production
+  </div>
+</div>
+
+<h2>The problem it solves</h2>
+<p>
+  Running costs for a property consist of dozens of items with different frequencies —
+  monthly advances, quarterly insurance, annual tax, one-off repairs. Splitting them
+  between several participants, tracking who has paid what, and reconciling once a year
+  takes hours in a spreadsheet every year, and produces an argument every time someone
+  asks "how did you arrive at that?".
+</p>
+<p>
+  The application runs this administration on its own: it records costs, allocates them to
+  individual people, <b>downloads transactions from the bank account and matches them</b>
+  against what is owed, tracks the running balance, and performs the
+  <b>monthly closing and the settlement without operator involvement</b>.
+</p>
+
+<div class="dlazdice">
+  <div class="dl"><div class="cislo">15 min</div><div class="popis">bank account is checked this often</div></div>
+  <div class="dl"><div class="cislo">100 %</div><div class="popis">of changes carry an audit trail (who, when, from what to what)</div></div>
+  <div class="dl"><div class="cislo">0</div><div class="popis">servers to maintain — it runs serverless</div></div>
+  <div class="dl"><div class="cislo">0</div><div class="popis">running cost, it fits the free tier</div></div>
+</div>
+
+<h2>How it works</h2>
+<div class="tok">
+  <div class="uzel"><b>Bank</b><span>transactions via API, read only</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Matching</b><span>by variable symbol</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Allocation</b><span>cost → shares per person</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Closing</b><span>freezes the month</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Settlement</b><span>advances vs. reality</span></div>
+</div>
+
+<div class="zvyrazneni">
+  <b>The key principle:</b> a participant pays a <b>fixed advance</b> by standing order —
+  nothing to change month to month. The difference against real costs is reconciled once
+  per period and folded into the new advance, exactly the way utility suppliers work.
+  The system therefore needs a single decision per year.
+</div>
+
+<div class="dva">
+  <div>
+    <h2>Benefits</h2>
+    <ul>
+      <li><b>Unattended operation</b> — closings and the annual settlement run themselves; the operator only approves or corrects.</li>
+      <li><b>Defensible numbers</b> — every amount shows where it came from; every change has a name and a timestamp.</li>
+      <li><b>No arguments</b> — each participant has their own overview with the breakdown, including a QR payment.</li>
+      <li><b>Outage tolerance</b> — bank data is fetched for the whole window, so an outage catches up by itself.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Risks and how they are handled</h2>
+    <ul>
+      <li><b>Unidentified payment</b> — unmatched transactions are never discarded; they wait for manual assignment.</li>
+      <li><b>Retroactive change</b> — a closed month is frozen and automation will not overwrite it.</li>
+      <li><b>Access to data</b> — administration requires sign-in; a participant sees only their own figures.</li>
+      <li><b>Dependence on the bank</b> — access is read-only; the system cannot send a payment.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Deployment status</h2>
+<table>
+  <thead><tr><th>Area</th><th style="width:24mm">Status</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Cost recording and allocation</td><td class="stav hotovo">in production</td><td>items, categories, shares per person, filtering and totals</td></tr>
+    <tr><td>Bank account integration</td><td class="stav hotovo">in production</td><td>verified against real transactions, including matching from a note</td></tr>
+    <tr><td>Advances, closings, settlement</td><td class="stav hotovo">in production</td><td>automatic, with manual correction available</td></tr>
+    <tr><td>Participant's overview</td><td class="stav hotovo">in production</td><td>personal link, running balance, QR payment</td></tr>
+    <tr><td>Settlement sent by e-mail</td><td class="stav planovano">planned</td><td>today the overview is shown in the application</td></tr>
+    <tr><td>Machine reading of receipts (AI)</td><td class="stav planovano">planned</td><td>will speed up entering one-off costs</td></tr>
+  </tbody>
+</table>
+
+<h2>Technical solution and cost</h2>
+<p>
+  The application runs <b>serverless on the Cloudflare platform</b> (Workers plus the D1
+  database), so there is no server to operate, back up or patch. Operation fits within the
+  free tier; the only external dependency is the bank API with <b>read-only</b> access.
+  Deploying a new version takes tens of seconds and is reversible.
+</p>
+
+<div class="paticka">
+  <span>FIO-uhrady · private repository · documentation in <code>docs/</code></span>
+  <span>Detail: STATUS.en.md · ARCHITECTURE.en.md · presentation.en.html</span>
+</div>
+
+</body>
+</html>

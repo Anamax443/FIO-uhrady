@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIO-uhrady — tok informací</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2331628c'/%3E%3Crect x='8' y='10' width='16' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='8' y='17' width='11' height='3' rx='1.5' fill='%23fff'/%3E%3C/svg%3E" />
+<style>
+:root {
+  --pozadi: #f2f4f6; --karta: #ffffff; --text: #16202a; --tlumene: #667080;
+  --linka: #dde3e9; --akcent: #31628c; --akcent-slabe: #e8eef4;
+  --banka: #7a5c2e; --banka-slabe: #f4ecdd;
+  --vystup: #3d7f4c; --vystup-slabe: #e6f1e8;
+  --ui: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pozadi: #12171c; --karta: #1b2127; --text: #e7edf2; --tlumene: #96a3b0;
+    --linka: #2a323a; --akcent: #6a9cce; --akcent-slabe: #1e2a35;
+    --banka: #c8a464; --banka-slabe: #2a2418;
+    --vystup: #63ac72; --vystup-slabe: #18261b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 28px 20px 60px; background: var(--pozadi); color: var(--text);
+  font-family: var(--ui); font-size: 16px; line-height: 1.55;
+  max-width: 1120px; margin-inline: auto;
+}
+header { margin-bottom: 26px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+.podtitul { color: var(--tlumene); margin: 0; }
+.jazyk { float: right; font-size: 14px; }
+.jazyk a { color: var(--akcent); }
+h2 { font-size: 19px; margin: 34px 0 10px; }
+h3 { font-size: 15px; margin: 22px 0 6px; }
+p { margin: 0 0 10px; max-width: 78ch; }
+.karta { background: var(--karta); border: 1px solid var(--linka); border-radius: 12px; padding: 18px; }
+.schema { overflow-x: auto; }
+.schema svg { display: block; min-width: 940px; width: 100%; height: auto; }
+.legenda { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; color: var(--tlumene); font-size: 14px; }
+.legenda span { display: flex; align-items: center; gap: 7px; }
+.tecka { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.t-vstup { border-color: var(--banka); background: var(--banka-slabe); }
+.t-worker { border-color: var(--akcent); background: var(--akcent-slabe); }
+.t-vystup { border-color: var(--vystup); background: var(--vystup-slabe); }
+.kroky { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 16px; }
+.krok { background: var(--karta); border: 1px solid var(--linka); border-left: 3px solid var(--akcent); border-radius: 8px; padding: 13px 15px; }
+.krok b { display: block; margin-bottom: 3px; }
+.krok span { color: var(--tlumene); font-size: 14.5px; }
+.cislo { display: inline-flex; width: 21px; height: 21px; border-radius: 50%; background: var(--akcent); color: #fff; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-right: 7px; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 15px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--linka); vertical-align: top; }
+th { color: var(--tlumene); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+code { font-family: var(--mono); font-size: 13.5px; background: var(--akcent-slabe); padding: 1px 5px; border-radius: 4px; }
+.pozn { color: var(--tlumene); font-size: 14.5px; }
+footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--linka); color: var(--tlumene); font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="jazyk"><a href="presentation.en.html">English</a></span>
+  <h1>FIO-uhrady — tok informací</h1>
+  <p class="podtitul">Kudy tečou data od banky až k člověku, který má zaplatit. Stav k 21. 8. 2026.</p>
+</header>
+
+<section class="karta schema">
+  <svg viewBox="0 0 960 430" role="img" aria-label="Schéma toku informací">
+    <defs>
+      <marker id="sipka" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+      </marker>
+    </defs>
+
+    <!-- rámec Workeru -->
+    <rect x="268" y="18" width="250" height="394" rx="12" fill="none" stroke="var(--akcent)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".55" />
+    <text x="393" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="var(--akcent)" font-family="var(--ui)">CLOUDFLARE WORKER</text>
+
+    <!-- vstupy -->
+    <g font-family="var(--ui)">
+      <rect x="14" y="58" width="180" height="62" rx="9" fill="var(--banka-slabe)" stroke="var(--banka)" stroke-width="1.5" />
+      <text x="104" y="83" text-anchor="middle" font-size="15" font-weight="650" fill="var(--text)">Fio banka</text>
+      <text x="104" y="103" text-anchor="middle" font-size="12.5" fill="var(--tlumene)">REST API, jen čtení</text>
+
+      <rect x="14" y="256" width="180" height="62" rx="9" fill="var(--banka-slabe)" stroke="var(--banka)" stroke-width="1.5" />
+      <text x="104" y="281" text-anchor="middle" font-size="15" font-weight="650" fill="var(--text)">Správce</text>
+      <text x="104" y="301" text-anchor="middle" font-size="12.5" fill="var(--tlumene)">zadává náklady domu</text>
+    </g>
+
+    <!-- worker: kroky -->
+    <g font-family="var(--ui)">
+      <rect x="288" y="56" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="79" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">1 · Stažení pohybů</text>
+      <text x="393" y="97" text-anchor="middle" font-size="12" fill="var(--tlumene)">periods/ s překryvem, dedup</text>
+
+      <rect x="288" y="128" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="151" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">2 · Párování plateb</text>
+      <text x="393" y="169" text-anchor="middle" font-size="12" fill="var(--tlumene)">VS → komentář → ručně</text>
+
+      <rect x="288" y="248" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="271" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">3 · Rozpad nákladů</text>
+      <text x="393" y="289" text-anchor="middle" font-size="12" fill="var(--tlumene)">položka → podíly na osoby</text>
+
+      <rect x="288" y="326" width="210" height="66" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="349" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">4 · Automat</text>
+      <text x="393" y="366" text-anchor="middle" font-size="12" fill="var(--tlumene)">uzávěrky a vyúčtování</text>
+      <text x="393" y="382" text-anchor="middle" font-size="12" fill="var(--tlumene)">bez zásahu člověka</text>
+    </g>
+
+    <!-- databáze -->
+    <g font-family="var(--ui)">
+      <rect x="556" y="150" width="150" height="130" rx="10" fill="var(--karta)" stroke="var(--akcent)" stroke-width="2" />
+      <text x="631" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text)">Cloudflare D1</text>
+      <text x="631" y="203" text-anchor="middle" font-size="12" fill="var(--tlumene)">náklady · platby</text>
+      <text x="631" y="220" text-anchor="middle" font-size="12" fill="var(--tlumene)">zálohy · uzávěrky</text>
+      <text x="631" y="237" text-anchor="middle" font-size="12" fill="var(--tlumene)">vyúčtování</text>
+      <text x="631" y="262" text-anchor="middle" font-size="12" font-weight="650" fill="var(--akcent)">+ audit každé změny</text>
+    </g>
+
+    <!-- výstupy -->
+    <g font-family="var(--ui)">
+      <rect x="762" y="58" width="184" height="62" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="83" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">Správa /admin</text>
+      <text x="854" y="103" text-anchor="middle" font-size="12" fill="var(--tlumene)">za přihlášením</text>
+
+      <rect x="762" y="184" width="184" height="72" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="208" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">Osobní odkaz</text>
+      <text x="854" y="226" text-anchor="middle" font-size="12" fill="var(--tlumene)">/v/{token} — jen čtení</text>
+      <text x="854" y="243" text-anchor="middle" font-size="12" fill="var(--tlumene)">zůstatek + QR platba</text>
+
+      <rect x="762" y="320" width="184" height="56" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="343" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">Export CSV</text>
+      <text x="854" y="361" text-anchor="middle" font-size="12" fill="var(--tlumene)">pro Excel</text>
+    </g>
+
+    <!-- šipky -->
+    <g stroke="var(--tlumene)" stroke-width="1.8" fill="none" marker-end="url(#sipka)" color="var(--tlumene)">
+      <path d="M 194 89 L 282 84" />
+      <path d="M 393 112 L 393 122" />
+      <path d="M 498 156 L 550 190" />
+      <path d="M 194 287 L 282 276" />
+      <path d="M 498 276 L 550 240" />
+      <path d="M 498 359 L 550 262" />
+      <path d="M 706 200 L 756 100" />
+      <path d="M 706 218 L 756 218" />
+      <path d="M 706 240 L 756 336" />
+    </g>
+    <g stroke="var(--akcent)" stroke-width="1.6" fill="none" marker-end="url(#sipka)" color="var(--akcent)" stroke-dasharray="5 4">
+      <path d="M 854 120 C 854 150, 730 130, 706 172" />
+    </g>
+    <text x="234" y="76" text-anchor="middle" font-size="11.5" fill="var(--tlumene)" font-family="var(--ui)">každých</text>
+    <text x="234" y="90" text-anchor="middle" font-size="11.5" fill="var(--tlumene)" font-family="var(--ui)">15 minut</text>
+    <text x="790" y="145" font-size="11.5" fill="var(--akcent)" font-family="var(--ui)">ruční opravy</text>
+  </svg>
+
+  <div class="legenda">
+    <span><i class="tecka t-vstup"></i> vstupy — odkud data přicházejí</span>
+    <span><i class="tecka t-worker"></i> zpracování v aplikaci</span>
+    <span><i class="tecka t-vystup"></i> výstupy — kdo se na co dívá</span>
+  </div>
+</section>
+
+<h2>Čtyři kroky, ze kterých se to skládá</h2>
+<div class="kroky">
+  <div class="krok">
+    <b><span class="cislo">1</span>Stažení pohybů</b>
+    <span>Každých 15 minut se stahují pohyby za celé okno, ne „od posledně". Kdyby zápis
+    selhal, další běh totéž stáhne znovu — pohyb se nemůže ztratit. Duplicity odchytí
+    ID pohybu z banky.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">2</span>Párování plateb</b>
+    <span>Hlavní znak je variabilní symbol, takže příspěvek může přijít odkudkoli.
+    Když chybí, hledá se známý VS v komentáři a ve zprávě pro příjemce. Co se nepozná,
+    zůstane čekat na správce — a u každé platby je vidět <b>čím</b> se poznala.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">3</span>Rozpad nákladů</b>
+    <span>Každá položka se dělí na konkrétní osoby, procentem nebo pevnou částkou.
+    Kombinace se u každé položky liší, žádné pevné skupiny. Nákup se dá rozpustit
+    do měsíců, protože uhlí za 42 000 není náklad jednoho měsíce.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">4</span>Automat</b>
+    <span>Měsíc se uzavře sám den splatnosti měsíce následujícího a po naplnění období
+    se samo spustí vyúčtování. Hotové se nikdy nepřepisuje a správce může obojí
+    zrušit a udělat znovu.</span>
+  </div>
+</div>
+
+<h2>Proč fixní záloha a vyúčtování</h2>
+<p>
+  Skutečné náklady kolísají — v zimě uhlí, v létě nic, jednou za rok daň. Kdyby se
+  platilo přesně podle nich, musel by si každý každý měsíc měnit trvalý příkaz.
+  Proto se platí <b>fixní záloha</b> a rozdíl proti skutečnosti se srovná
+  <b>jednou za období</b>, stejně jako u energií.
+</p>
+
+<table>
+  <thead><tr><th>Pojem</th><th>Co to znamená</th></tr></thead>
+  <tbody>
+    <tr><td><b>Záloha</b></td><td>Fixní měsíční částka na trvalý příkaz. Historie se nepřepisuje, takže zpětný výpočet sedí na to, co se tehdy opravdu platilo.</td></tr>
+    <tr><td><b>Uzávěrka</b></td><td>Zamrazí, co v daném měsíci platilo — náklady, podíly i zálohu. Bez ní by zpětný pohled tvrdil, že v lednu platilo dnešní číslo.</td></tr>
+    <tr><td><b>Vyúčtování</b></td><td>Srovná zálohy se skutečností za celé období. Rozdíl se rozpustí do nové zálohy, aby trvalý příkaz zůstal fixní.</td></tr>
+    <tr><td><b>Průběžný zůstatek</b></td><td>Dluh se přenáší z měsíce na měsíc. Když jeden měsíc přijde míň, chybějící část se přičte k dalšímu.</td></tr>
+  </tbody>
+</table>
+
+<h2>Co je vidět a komu</h2>
+<table>
+  <thead><tr><th>Kdo</th><th>Kde</th><th>Co uvidí</th></tr></thead>
+  <tbody>
+    <tr><td>Správce</td><td><code>/admin</code> za přihlášením</td><td>všechno — náklady, osoby, platby, zálohy, uzávěrky, vyúčtování, historii změn</td></tr>
+    <tr><td>Člen domácnosti</td><td><code>/v/{token}</code> bez přihlášení</td><td>jen svoje čísla a souhrn za dům; kolik platí ostatní se odsud nedozví</td></tr>
+    <tr><td>Kdokoli</td><td><code>/</code></td><td>rozcestník a jestli aplikace žije — žádná data</td></tr>
+  </tbody>
+</table>
+
+<h2>Na čem to stojí</h2>
+<table>
+  <thead><tr><th>Vrstva</th><th>Řešení</th><th>Proč</th></tr></thead>
+  <tbody>
+    <tr><td>Aplikace i API</td><td>Cloudflare Workers</td><td>jeden nasazovaný celek, žádný server k údržbě</td></tr>
+    <tr><td>Data</td><td>Cloudflare D1 (SQLite)</td><td>u aplikace, bez správy databázového serveru</td></tr>
+    <tr><td>Pravidelný běh</td><td>Cron Trigger, 15 min</td><td>stahování z banky a automatika</td></tr>
+    <tr><td>Banka</td><td>Fio REST API, read-only token</td><td>aplikace jen čte, nic neplatí</td></tr>
+    <tr><td>Přihlášení</td><td>PIN, výhledově Cloudflare Access</td><td>hesla nejsou v kódu, jen otisk PBKDF2</td></tr>
+  </tbody>
+</table>
+
+<h2>Zásady, které to drží pohromadě</h2>
+<div class="kroky">
+  <div class="krok"><b>Žádný zápis bez auditu</b><span>Změna i její záznam jdou jednou dávkou. Nemůže vzniknout změna, u které není vidět kdo a kdy.</span></div>
+  <div class="krok"><b>Nikdy nepřepsat hotové</b><span>Uzavřený měsíc ani hotové vyúčtování automat nepřepíše. Jinak by uzávěrka ztratila smysl.</span></div>
+  <div class="krok"><b>Texty patří do nastavení</b><span>Co se může měnit — název příjemce v QR, věty pro členy — se píše v Nastavení, ne v kódu.</span></div>
+  <div class="krok"><b>Výstup musí dávat smysl zvenčí</b><span>Z hlášky musí být poznat, jestli se čeká, je vypnuto, nebo se něco pokazilo — a co s tím.</span></div>
+</div>
+
+<footer>
+  FIO-uhrady · soukromý projekt · podrobnosti v <code>docs/STAV.md</code>,
+  <code>docs/ARCHITECTURE.md</code> a <code>HANDOFF.md</code>
+</footer>
+
+</body>
+</html>

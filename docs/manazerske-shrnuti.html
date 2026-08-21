@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIO-uhrady — manažerské shrnutí</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2331628c'/%3E%3Crect x='8' y='10' width='16' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='8' y='17' width='11' height='3' rx='1.5' fill='%23fff'/%3E%3C/svg%3E" />
+<style>
+@page { size: A4 portrait; margin: 14mm 15mm; }
+
+:root {
+  --text: #16202a; --tlumene: #5a6572; --linka: #d5dbe2;
+  --akcent: #31628c; --akcent-slabe: #eef3f8;
+  --ok: #3d7f4c; --ceka: #96700d;
+  --ui: "Segoe UI", -apple-system, system-ui, "Helvetica Neue", sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0 auto; padding: 14mm 15mm; background: #fff; color: var(--text);
+  font-family: var(--ui); font-size: 9.6pt; line-height: 1.42;
+  width: 210mm; min-height: 297mm;
+}
+@media screen {
+  body { box-shadow: 0 2px 18px rgba(20, 30, 40, .18); margin-block: 24px; }
+  html { background: #eceff2; }
+}
+
+.hlava { display: flex; justify-content: space-between; align-items: flex-start; gap: 12mm; border-bottom: 2.5px solid var(--akcent); padding-bottom: 3mm; margin-bottom: 4mm; }
+h1 { font-size: 17pt; margin: 0 0 1mm; letter-spacing: -.01em; }
+.perex { margin: 0; color: var(--tlumene); font-size: 10pt; }
+.meta { text-align: right; color: var(--tlumene); font-size: 8pt; white-space: nowrap; line-height: 1.5; }
+.meta b { color: var(--text); }
+
+h2 { font-size: 10.5pt; margin: 4.5mm 0 1.5mm; color: var(--akcent); text-transform: uppercase; letter-spacing: .06em; }
+p { margin: 0 0 2mm; }
+
+.dlazdice { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5mm; margin: 2mm 0 1mm; }
+.dl { border: 1px solid var(--linka); border-radius: 2mm; padding: 2.5mm 3mm; }
+.dl .cislo { font-size: 15pt; font-weight: 700; line-height: 1.15; color: var(--akcent); }
+.dl .popis { color: var(--tlumene); font-size: 8pt; }
+
+.tok { display: flex; align-items: stretch; gap: 0; margin: 2mm 0 1mm; }
+.tok .uzel { flex: 1; border: 1px solid var(--linka); border-radius: 2mm; padding: 2.5mm; text-align: center; background: var(--akcent-slabe); }
+.tok .uzel b { display: block; font-size: 9pt; }
+.tok .uzel span { color: var(--tlumene); font-size: 7.6pt; }
+.tok .sip { display: flex; align-items: center; padding: 0 1.5mm; color: var(--akcent); font-size: 13pt; }
+
+.dva { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+ul { margin: 0 0 2mm; padding-left: 4.5mm; }
+li { margin-bottom: 1.2mm; }
+
+table { border-collapse: collapse; width: 100%; font-size: 8.8pt; }
+th, td { text-align: left; padding: 1.4mm 2mm; border-bottom: 1px solid var(--linka); vertical-align: top; }
+th { color: var(--tlumene); font-size: 7.6pt; text-transform: uppercase; letter-spacing: .05em; }
+td.stav { white-space: nowrap; font-weight: 600; }
+.hotovo { color: var(--ok); }
+.planovano { color: var(--ceka); }
+
+.zvyrazneni { border-left: 3px solid var(--akcent); background: var(--akcent-slabe); padding: 2.5mm 3.5mm; border-radius: 0 2mm 2mm 0; margin: 2mm 0; }
+.zvyrazneni b { color: var(--akcent); }
+
+.paticka { margin-top: 5mm; padding-top: 2mm; border-top: 1px solid var(--linka); color: var(--tlumene); font-size: 7.6pt; display: flex; justify-content: space-between; gap: 6mm; }
+</style>
+</head>
+<body>
+
+<div class="hlava">
+  <div>
+    <h1>FIO-uhrady</h1>
+    <p class="perex">Automatické rozúčtování provozních nákladů a párování úhrad proti bankovnímu účtu.</p>
+  </div>
+  <div class="meta">
+    Manažerské shrnutí<br />
+    Stav k <b>21. 8. 2026</b><br />
+    Verze <b>b332ced</b> · v provozu
+  </div>
+</div>
+
+<h2>Co systém řeší</h2>
+<p>
+  Provozní náklady objektu se skládají z desítek položek s různou periodicitou — měsíční
+  zálohy, čtvrtletní pojištění, roční daň, jednorázové opravy. Rozdělit je mezi několik
+  účastníků, ohlídat, kdo kolik poslal, a jednou za rok to srovnat, znamená v tabulkovém
+  procesoru několik hodin práce ročně a spor pokaždé, když se někdo zeptá „jak jsi na to přišel".
+</p>
+<p>
+  Aplikace tuhle agendu vede sama: náklady eviduje, rozpočítává na jednotlivé osoby,
+  <b>stahuje pohyby z bankovního účtu a páruje je</b> s předpisem, hlídá průběžný zůstatek
+  a v pravidelných intervalech provádí <b>uzávěrku a vyúčtování bez zásahu obsluhy</b>.
+</p>
+
+<div class="dlazdice">
+  <div class="dl"><div class="cislo">15 min</div><div class="popis">interval kontroly bankovního účtu</div></div>
+  <div class="dl"><div class="cislo">100 %</div><div class="popis">změn s auditní stopou (kdo, kdy, z čeho na co)</div></div>
+  <div class="dl"><div class="cislo">0</div><div class="popis">serverů k údržbě — běží bezserverově</div></div>
+  <div class="dl"><div class="cislo">0 Kč</div><div class="popis">provozní náklady v rámci free tarifu</div></div>
+</div>
+
+<h2>Jak to funguje</h2>
+<div class="tok">
+  <div class="uzel"><b>Banka</b><span>pohyby přes API, jen čtení</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Párování</b><span>podle variabilního symbolu</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Rozúčtování</b><span>náklad → podíly osob</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Uzávěrka</b><span>zamrazí stav měsíce</span></div>
+  <div class="sip">→</div>
+  <div class="uzel"><b>Vyúčtování</b><span>srovná zálohy se skutečností</span></div>
+</div>
+
+<div class="zvyrazneni">
+  <b>Klíčový princip:</b> účastník platí <b>fixní zálohu</b> trvalým příkazem — nemusí nic měnit.
+  Rozdíl proti skutečným nákladům se srovná jednou za období a rozpustí do nové zálohy,
+  stejně jako u dodavatelů energií. Systém tak vyžaduje jediné rozhodnutí ročně.
+</div>
+
+<div class="dva">
+  <div>
+    <h2>Přínosy</h2>
+    <ul>
+      <li><b>Bezobslužný provoz</b> — uzávěrky i roční vyúčtování běží samy, obsluha je jen schvaluje nebo koriguje.</li>
+      <li><b>Doložitelnost</b> — u každé částky je vidět, z čeho vznikla; každá změna má jméno a čas.</li>
+      <li><b>Bez sporů</b> — každý účastník vidí vlastní přehled s rozpadem, včetně QR platby.</li>
+      <li><b>Odolnost vůči výpadku</b> — data z banky se stahují za celé období, výpadek se sám dožene.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Rizika a jak jsou ošetřená</h2>
+    <ul>
+      <li><b>Chybná platba</b> — nespárované úhrady systém nezahazuje, čekají na ruční přiřazení.</li>
+      <li><b>Zpětná změna dat</b> — uzavřený měsíc je zamražený, automatika ho nepřepíše.</li>
+      <li><b>Přístup k údajům</b> — správa za přihlášením, účastník vidí jen svoje čísla.</li>
+      <li><b>Závislost na bance</b> — přístup je pouze pro čtení, systém nemůže odeslat platbu.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Stav nasazení</h2>
+<table>
+  <thead><tr><th>Oblast</th><th style="width:22mm">Stav</th><th>Poznámka</th></tr></thead>
+  <tbody>
+    <tr><td>Evidence a rozúčtování nákladů</td><td class="stav hotovo">v provozu</td><td>položky, kategorie, podíly na osoby, filtrování a součty</td></tr>
+    <tr><td>Napojení na bankovní účet</td><td class="stav hotovo">v provozu</td><td>ověřeno proti reálným pohybům včetně párování z poznámky</td></tr>
+    <tr><td>Zálohy, uzávěrky, vyúčtování</td><td class="stav hotovo">v provozu</td><td>automatické, s možností ruční korekce</td></tr>
+    <tr><td>Přehled pro účastníka</td><td class="stav hotovo">v provozu</td><td>osobní odkaz, průběžný zůstatek, QR platba</td></tr>
+    <tr><td>Rozesílání vyúčtování e-mailem</td><td class="stav planovano">plánováno</td><td>dnes se přehled zobrazuje v aplikaci</td></tr>
+    <tr><td>Strojové čtení účtenek (AI)</td><td class="stav planovano">plánováno</td><td>zrychlí zadávání jednorázových nákladů</td></tr>
+  </tbody>
+</table>
+
+<h2>Technické řešení a náklady</h2>
+<p>
+  Aplikace běží <b>bezserverově na platformě Cloudflare</b> (Workers + databáze D1), takže
+  neexistuje server, který by bylo nutné provozovat, zálohovat a aktualizovat. Provoz se
+  vejde do bezplatného tarifu; jedinou externí závislostí je bankovní API s přístupem
+  <b>pouze pro čtení</b>. Nasazení nové verze trvá desítky sekund a je vratné.
+</p>
+
+<div class="paticka">
+  <span>FIO-uhrady · privátní repozitář · dokumentace v <code>docs/</code></span>
+  <span>Podrobně: STAV.md · ARCHITECTURE.md · prezentace.html</span>
+</div>
+
+</body>
+</html>

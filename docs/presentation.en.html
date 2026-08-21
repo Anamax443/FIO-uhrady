@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIO-uhrady — information flow</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2331628c'/%3E%3Crect x='8' y='10' width='16' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='8' y='17' width='11' height='3' rx='1.5' fill='%23fff'/%3E%3C/svg%3E" />
+<style>
+:root {
+  --pozadi: #f2f4f6; --karta: #ffffff; --text: #16202a; --tlumene: #667080;
+  --linka: #dde3e9; --akcent: #31628c; --akcent-slabe: #e8eef4;
+  --banka: #7a5c2e; --banka-slabe: #f4ecdd;
+  --vystup: #3d7f4c; --vystup-slabe: #e6f1e8;
+  --ui: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pozadi: #12171c; --karta: #1b2127; --text: #e7edf2; --tlumene: #96a3b0;
+    --linka: #2a323a; --akcent: #6a9cce; --akcent-slabe: #1e2a35;
+    --banka: #c8a464; --banka-slabe: #2a2418;
+    --vystup: #63ac72; --vystup-slabe: #18261b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 28px 20px 60px; background: var(--pozadi); color: var(--text);
+  font-family: var(--ui); font-size: 16px; line-height: 1.55;
+  max-width: 1120px; margin-inline: auto;
+}
+header { margin-bottom: 26px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+.podtitul { color: var(--tlumene); margin: 0; }
+.jazyk { float: right; font-size: 14px; }
+.jazyk a { color: var(--akcent); }
+h2 { font-size: 19px; margin: 34px 0 10px; }
+p { margin: 0 0 10px; max-width: 78ch; }
+.karta { background: var(--karta); border: 1px solid var(--linka); border-radius: 12px; padding: 18px; }
+.schema { overflow-x: auto; }
+.schema svg { display: block; min-width: 940px; width: 100%; height: auto; }
+.legenda { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; color: var(--tlumene); font-size: 14px; }
+.legenda span { display: flex; align-items: center; gap: 7px; }
+.tecka { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.t-vstup { border-color: var(--banka); background: var(--banka-slabe); }
+.t-worker { border-color: var(--akcent); background: var(--akcent-slabe); }
+.t-vystup { border-color: var(--vystup); background: var(--vystup-slabe); }
+.kroky { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 16px; }
+.krok { background: var(--karta); border: 1px solid var(--linka); border-left: 3px solid var(--akcent); border-radius: 8px; padding: 13px 15px; }
+.krok b { display: block; margin-bottom: 3px; }
+.krok span { color: var(--tlumene); font-size: 14.5px; }
+.cislo { display: inline-flex; width: 21px; height: 21px; border-radius: 50%; background: var(--akcent); color: #fff; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-right: 7px; }
+table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 15px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--linka); vertical-align: top; }
+th { color: var(--tlumene); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+code { font-family: var(--mono); font-size: 13.5px; background: var(--akcent-slabe); padding: 1px 5px; border-radius: 4px; }
+footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--linka); color: var(--tlumene); font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="jazyk"><a href="prezentace.html">Česky</a></span>
+  <h1>FIO-uhrady — information flow</h1>
+  <p class="podtitul">How data travels from the bank to the person who owes money. As of 21 Aug 2026.</p>
+</header>
+
+<section class="karta schema">
+  <svg viewBox="0 0 960 430" role="img" aria-label="Information flow diagram">
+    <defs>
+      <marker id="sipka" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+      </marker>
+    </defs>
+
+    <rect x="268" y="18" width="250" height="394" rx="12" fill="none" stroke="var(--akcent)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".55" />
+    <text x="393" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="var(--akcent)" font-family="var(--ui)">CLOUDFLARE WORKER</text>
+
+    <g font-family="var(--ui)">
+      <rect x="14" y="58" width="180" height="62" rx="9" fill="var(--banka-slabe)" stroke="var(--banka)" stroke-width="1.5" />
+      <text x="104" y="83" text-anchor="middle" font-size="15" font-weight="650" fill="var(--text)">Fio bank</text>
+      <text x="104" y="103" text-anchor="middle" font-size="12.5" fill="var(--tlumene)">REST API, read-only</text>
+
+      <rect x="14" y="256" width="180" height="62" rx="9" fill="var(--banka-slabe)" stroke="var(--banka)" stroke-width="1.5" />
+      <text x="104" y="281" text-anchor="middle" font-size="15" font-weight="650" fill="var(--text)">Administrator</text>
+      <text x="104" y="301" text-anchor="middle" font-size="12.5" fill="var(--tlumene)">enters house costs</text>
+    </g>
+
+    <g font-family="var(--ui)">
+      <rect x="288" y="56" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="79" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">1 · Download</text>
+      <text x="393" y="97" text-anchor="middle" font-size="12" fill="var(--tlumene)">periods/ with overlap, dedup</text>
+
+      <rect x="288" y="128" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="151" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">2 · Matching</text>
+      <text x="393" y="169" text-anchor="middle" font-size="12" fill="var(--tlumene)">VS → comment → manual</text>
+
+      <rect x="288" y="248" width="210" height="56" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="271" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">3 · Cost split</text>
+      <text x="393" y="289" text-anchor="middle" font-size="12" fill="var(--tlumene)">item → shares per person</text>
+
+      <rect x="288" y="326" width="210" height="66" rx="8" fill="var(--akcent-slabe)" stroke="var(--akcent)" stroke-width="1.5" />
+      <text x="393" y="349" text-anchor="middle" font-size="14" font-weight="650" fill="var(--text)">4 · Automation</text>
+      <text x="393" y="366" text-anchor="middle" font-size="12" fill="var(--tlumene)">closings and settlement</text>
+      <text x="393" y="382" text-anchor="middle" font-size="12" fill="var(--tlumene)">without human input</text>
+    </g>
+
+    <g font-family="var(--ui)">
+      <rect x="556" y="150" width="150" height="130" rx="10" fill="var(--karta)" stroke="var(--akcent)" stroke-width="2" />
+      <text x="631" y="180" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text)">Cloudflare D1</text>
+      <text x="631" y="203" text-anchor="middle" font-size="12" fill="var(--tlumene)">costs · payments</text>
+      <text x="631" y="220" text-anchor="middle" font-size="12" fill="var(--tlumene)">advances · closings</text>
+      <text x="631" y="237" text-anchor="middle" font-size="12" fill="var(--tlumene)">settlements</text>
+      <text x="631" y="262" text-anchor="middle" font-size="12" font-weight="650" fill="var(--akcent)">+ audit of every change</text>
+    </g>
+
+    <g font-family="var(--ui)">
+      <rect x="762" y="58" width="184" height="62" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="83" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">Admin /admin</text>
+      <text x="854" y="103" text-anchor="middle" font-size="12" fill="var(--tlumene)">behind sign-in</text>
+
+      <rect x="762" y="184" width="184" height="72" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="208" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">Personal link</text>
+      <text x="854" y="226" text-anchor="middle" font-size="12" fill="var(--tlumene)">/v/{token} — read only</text>
+      <text x="854" y="243" text-anchor="middle" font-size="12" fill="var(--tlumene)">balance + QR payment</text>
+
+      <rect x="762" y="320" width="184" height="56" rx="9" fill="var(--vystup-slabe)" stroke="var(--vystup)" stroke-width="1.5" />
+      <text x="854" y="343" text-anchor="middle" font-size="14.5" font-weight="650" fill="var(--text)">CSV export</text>
+      <text x="854" y="361" text-anchor="middle" font-size="12" fill="var(--tlumene)">for Excel</text>
+    </g>
+
+    <g stroke="var(--tlumene)" stroke-width="1.8" fill="none" marker-end="url(#sipka)" color="var(--tlumene)">
+      <path d="M 194 89 L 282 84" />
+      <path d="M 393 112 L 393 122" />
+      <path d="M 498 156 L 550 190" />
+      <path d="M 194 287 L 282 276" />
+      <path d="M 498 276 L 550 240" />
+      <path d="M 498 359 L 550 262" />
+      <path d="M 706 200 L 756 100" />
+      <path d="M 706 218 L 756 218" />
+      <path d="M 706 240 L 756 336" />
+    </g>
+    <g stroke="var(--akcent)" stroke-width="1.6" fill="none" marker-end="url(#sipka)" color="var(--akcent)" stroke-dasharray="5 4">
+      <path d="M 854 120 C 854 150, 730 130, 706 172" />
+    </g>
+    <text x="234" y="76" text-anchor="middle" font-size="11.5" fill="var(--tlumene)" font-family="var(--ui)">every</text>
+    <text x="234" y="90" text-anchor="middle" font-size="11.5" fill="var(--tlumene)" font-family="var(--ui)">15 minutes</text>
+    <text x="784" y="145" font-size="11.5" fill="var(--akcent)" font-family="var(--ui)">manual fixes</text>
+  </svg>
+
+  <div class="legenda">
+    <span><i class="tecka t-vstup"></i> inputs — where data comes from</span>
+    <span><i class="tecka t-worker"></i> processing inside the application</span>
+    <span><i class="tecka t-vystup"></i> outputs — who looks at what</span>
+  </div>
+</section>
+
+<h2>The four steps it is made of</h2>
+<div class="kroky">
+  <div class="krok">
+    <b><span class="cislo">1</span>Downloading transactions</b>
+    <span>Every 15 minutes the whole window is fetched, not "since last time".
+    If a write failed, the next run fetches the same data again — a transaction cannot
+    be lost. Duplicates are caught by the bank's transaction id.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">2</span>Matching payments</b>
+    <span>The variable symbol is the primary marker, so a contribution can arrive from
+    anywhere. When it is missing, a known symbol is looked for in the transaction comment
+    and in the message for the recipient. Anything unrecognised waits for the administrator —
+    and every payment shows <b>how</b> it was matched.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">3</span>Splitting the costs</b>
+    <span>Each item is split across named people, by percentage or by a fixed amount.
+    The combination differs per item; there are no fixed groups. A purchase can be spread
+    over months, because coal worth 42,000 is not one month's cost.</span>
+  </div>
+  <div class="krok">
+    <b><span class="cislo">4</span>Automation</b>
+    <span>A month closes itself on the due date of the following month, and once the period
+    is complete the settlement runs on its own. Finished work is never overwritten, and the
+    administrator can undo and redo both.</span>
+  </div>
+</div>
+
+<h2>Why a fixed advance and a settlement</h2>
+<p>
+  Real costs fluctuate — coal in winter, nothing in summer, property tax once a year.
+  Paying exactly what they are would mean changing the standing order every month.
+  So a <b>fixed advance</b> is paid and the difference against reality is reconciled
+  <b>once per period</b>, the same way utilities work.
+</p>
+
+<table>
+  <thead><tr><th>Term</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td><b>Advance</b></td><td>A fixed monthly amount paid by standing order. Its history is never rewritten, so a retrospective calculation matches what was really being paid at the time.</td></tr>
+    <tr><td><b>Closing</b></td><td>Freezes what applied in that month — costs, shares and the advance. Without it, hindsight would claim January's figure was today's.</td></tr>
+    <tr><td><b>Settlement</b></td><td>Reconciles advances against reality for the whole period. The difference is folded into the new advance so the standing order stays fixed.</td></tr>
+    <tr><td><b>Running balance</b></td><td>The debt carries from month to month. If one month falls short, the missing part is added to the next.</td></tr>
+  </tbody>
+</table>
+
+<h2>Who sees what</h2>
+<table>
+  <thead><tr><th>Who</th><th>Where</th><th>What they see</th></tr></thead>
+  <tbody>
+    <tr><td>Administrator</td><td><code>/admin</code>, behind sign-in</td><td>everything — costs, people, payments, advances, closings, settlements, change history</td></tr>
+    <tr><td>Household member</td><td><code>/v/{token}</code>, no sign-in</td><td>only their own figures and the household total; what others pay is not visible</td></tr>
+    <tr><td>Anyone</td><td><code>/</code></td><td>a landing page and whether the app is alive — no data</td></tr>
+  </tbody>
+</table>
+
+<h2>What it runs on</h2>
+<table>
+  <thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Application and API</td><td>Cloudflare Workers</td><td>one deployable unit, no server to maintain</td></tr>
+    <tr><td>Data</td><td>Cloudflare D1 (SQLite)</td><td>next to the application, no database server to run</td></tr>
+    <tr><td>Scheduled work</td><td>Cron Trigger, 15 min</td><td>bank download and automation</td></tr>
+    <tr><td>Bank</td><td>Fio REST API, read-only token</td><td>the app only reads; it never pays anything</td></tr>
+    <tr><td>Sign-in</td><td>PIN, Cloudflare Access planned</td><td>no passwords in the code, only a PBKDF2 hash</td></tr>
+  </tbody>
+</table>
+
+<h2>The principles holding it together</h2>
+<div class="kroky">
+  <div class="krok"><b>No write without an audit record</b><span>The change and its record go in one batch. A change without a visible who and when cannot exist.</span></div>
+  <div class="krok"><b>Never overwrite finished work</b><span>Automation will not touch a closed month or a completed settlement. Otherwise closings would be meaningless.</span></div>
+  <div class="krok"><b>Wording belongs in settings</b><span>Anything that may change — the QR recipient name, the sentences members read — is written in Settings, not in the code.</span></div>
+  <div class="krok"><b>Output must make sense from outside</b><span>A message must reveal whether the system is waiting, switched off, or broken — and what to do about it.</span></div>
+</div>
+
+<footer>
+  FIO-uhrady · private project · details in <code>docs/STATUS.en.md</code>,
+  <code>docs/ARCHITECTURE.en.md</code> and <code>HANDOFF.md</code>
+</footer>
+
+</body>
+</html>

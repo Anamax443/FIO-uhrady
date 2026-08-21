@@ -2,6 +2,41 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — dokumentace srovnaná, česky i anglicky
+
+Dokumentace narostla nesourodě, tak je celá přepsaná a **zdvojená do angličtiny**.
+Rozdělení roli: HANDOFF je deník (proč se co rozhodlo, append-only), STAV je
+snímek dneška (přepisuje se), ARCHITECTURE je jak je to poskládané, BUILD je
+postup od nuly.
+
+| Dokument | Česky | Anglicky |
+|---|---|---|
+| Aktuální stav | `docs/STAV.md` | `docs/STATUS.en.md` |
+| Architektura | `docs/ARCHITECTURE.md` | `docs/ARCHITECTURE.en.md` |
+| Myšlenková mapa + diagramy | `docs/MAPA.md` | `docs/MAP.en.md` |
+| Prezentace toku informací | `docs/prezentace.html` | `docs/presentation.en.html` |
+| Manažerské shrnutí A4 | `docs/manazerske-shrnuti.html` | `docs/management-summary.en.html` |
+| Postup od nuly | `docs/BUILD.md` | `docs/BUILD.en.md` |
+| Rozcestník | `README.md` | `README.en.md` |
+
+- **Myšlenková mapa a vývojové diagramy** v mermaidu: z čeho se systém skládá,
+  kudy tečou data, životní cyklus měsíce, rozhodovací strom párování plateb
+  a vrstvy kódu.
+- **HTML prezentace** má tok informací jako **vlastní inline SVG** — žádná
+  závislost na CDN, otevře se i bez internetu.
+- **Manažerské shrnutí** je stavěné na tisk: `@page A4 portrait`, jedna strana,
+  problém → řešení → přínosy → rizika → stav → náklady.
+- **Dokumentace v aplikaci je dvojjazyčná**: `/admin/dokumentace` a
+  `/admin/documentation`, kapitoly mají **stejná id**, takže odkaz do konkrétní
+  části přežije přepnutí jazyka.
+
+Do dokumentace jsem vytáhl i pasti, které mě dnes stály čas: `--file` na ostré
+D1, vlastní seznam sloupců v `osobaPodleTokenu`, duplicitní `const` shodí celý
+skript stránky, a `HTTP 500` z Fio není chyba tokenu.
+
+**Nepřeloženo zůstává samotné UI správy** — je to větší práce než dokumentace
+a nikdo ji zatím nepotřebuje.
+
 ## 2026-08-20 — texty patří do Nastavení, ne do kódu
 
 Uživatel to řekl natvrdo: **co se může měnit, si píše sám.** Aplikace skládala

@@ -459,9 +459,19 @@ export default {
           );
         }
 
-        if (request.method === 'GET' && path === '/admin/dokumentace') {
+        if (
+          request.method === 'GET' &&
+          (path === '/admin/dokumentace' || path === '/admin/documentation')
+        ) {
           const nastaveni = await nactiNastaveni(env.DB);
-          return html(renderDokumentace(nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
+          return html(
+            renderDokumentace(
+              nastaveni.nazev_domu,
+              kdo,
+              env.GIT_COMMIT ?? 'dev',
+              path === '/admin/documentation',
+            ),
+          );
         }
 
         if (request.method === 'GET' && path === '/admin/uzaverky') {

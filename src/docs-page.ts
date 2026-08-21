@@ -4,6 +4,7 @@
  * Psané pro člověka, který do appky přijde bez znalosti vnitřností: co kde
  * nastavit, co které číslo znamená a co dělat, když něco nesedí.
  */
+import { CHAPTERS } from './docs-en.js';
 import { esc, shell } from './ui.js';
 
 const STYL = `
@@ -24,6 +25,8 @@ const STYL = `
 .text table { border: 1px solid var(--border); }
 .text th, .text td { border-bottom: 1px solid var(--border-soft); padding: 4px 8px; height: auto; white-space: normal; }
 .text th { background: var(--head); text-align: left; font-weight: 600; }
+.jazyk { color: var(--accent); text-decoration: none; font-size: 11.5px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 2px; }
+.jazyk:hover { background: var(--hover); }
 .poznamka { border-left: 2px solid var(--accent); background: var(--accent-soft); padding: 7px 10px; }
 .varovani { border-left: 2px solid var(--warn); background: var(--warn-soft, rgba(150, 112, 13, .12)); padding: 7px 10px; }
 @media (max-width: 860px) {
@@ -363,21 +366,41 @@ const KAPITOLY: Kapitola[] = [
   },
 ];
 
-export function renderDokumentace(nazevDomu: string, kdo: string, commit: string): string {
-  const menu = KAPITOLY.map((k) => `<a href="#${k.id}">${esc(k.nadpis)}</a>`).join('');
-  const text = KAPITOLY.map(
-    (k) => `<section id="${k.id}"><h2>${esc(k.nadpis)}</h2>${k.telo}</section>`,
-  ).join('');
+/**
+ * Dokumentace česky i anglicky. Kapitoly mají v obou jazycích **stejná id**,
+ * takže odkaz do konkrétní části přežije přepnutí jazyka.
+ */
+export function renderDokumentace(
+  nazevDomu: string,
+  kdo: string,
+  commit: string,
+  anglicky = false,
+): string {
+  const kapitoly = anglicky ? CHAPTERS : KAPITOLY;
+  const menu = kapitoly.map((k) => `<a href="#${k.id}">${esc(k.nadpis)}</a>`).join('');
+  const text = kapitoly
+    .map((k) => `<section id="${k.id}"><h2>${esc(k.nadpis)}</h2>${k.telo}</section>`)
+    .join('');
 
   const obsah = `${STYL}
   <div>
-    <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg>Dokumentace</div>
+    <div class="panehead">
+      <svg class="icon icon-sm"><use href="#i-doc"/></svg>${anglicky ? 'Documentation' : 'Dokumentace'}
+      <span class="spacer"></span>
+      <a class="jazyk" href="${anglicky ? '/admin/dokumentace' : '/admin/documentation'}"
+         title="${anglicky ? 'Přepnout do češtiny' : 'Switch to English'}">${
+           anglicky ? 'Česky' : 'English'
+         }</a>
+    </div>
     <div class="dok">
       <nav class="obsah-menu">${menu}</nav>
       <div class="text">
         <p>
-          Jak se s aplikací pracuje a podle čeho počítá. Psáno tak, aby se v tom vyznal
-          i někdo, kdo ji nestavěl.
+          ${
+            anglicky
+              ? 'How the application is used and what it bases its numbers on. Written so that someone who did not build it can follow along.'
+              : 'Jak se s aplikací pracuje a podle čeho počítá. Psáno tak, aby se v tom vyznal i někdo, kdo ji nestavěl.'
+          }
         </p>
         ${text}
       </div>
@@ -387,9 +410,11 @@ export function renderDokumentace(nazevDomu: string, kdo: string, commit: string
   return shell({
     aktivni: 'dokumentace',
     nazevDomu,
-    titulek: 'Dokumentace',
+    titulek: anglicky ? 'Documentation' : 'Dokumentace',
     commit,
     obsah,
-    status: `<span>kapitol <b>${KAPITOLY.length}</b></span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    status: `<span>${anglicky ? 'chapters' : 'kapitol'} <b>${kapitoly.length}</b></span><span class="spacer"></span><span>${
+      anglicky ? 'signed in' : 'přihlášen'
+    }: ${esc(kdo)}</span>`,
   });
 }
