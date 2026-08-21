@@ -169,7 +169,9 @@ function popisChyby(detail: string): string {
   if (/D1_ERROR|Network|fetch failed/i.test(detail)) {
     return 'Databáze neodpověděla. Tady opakování smysl má — zkus to prosím za chvíli znovu.';
   }
-  return 'Uložení se nepovedlo. Podrobnost je níž a taky v logu Workeru.';
+  // Ne každý požadavek je zápis — „uložení se nepovedlo" u dotazu na AI
+  // posílá člověka hledat chybu do databáze, kde žádná není.
+  return 'Nepovedlo se to. Podrobnost je níž a taky v logu Workeru.';
 }
 
 /** Do auditu patří i to, kdy se bude zavírat — jinak je „zapnuto" prázdné slovo. */

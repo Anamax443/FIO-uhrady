@@ -171,6 +171,29 @@ export function prvniJson<T>(vstup: unknown): T | null {
 
 export class ChybaAi extends Error {}
 
+/**
+ * Text odpovědi z toho, co Workers AI vrátí. **Tvar se liší model od modelu:**
+ * klasické instruct modely dávají `{ response }`, OpenAI-kompatibilní (gpt-oss)
+ * odpovídají `{ choices: [{ message: { content, reasoning } }] }` a vlastní
+ * uvažování mají v `reasoning` zvlášť.
+ *
+ * Bez tohohle skončil `gpt-oss-120b` na „nevrátil JSON", i když odpověď poslal
+ * správně — jen jinam, než se hledalo.
+ */
+export function textOdpovedi(o: unknown): unknown {
+  if (o === null || typeof o !== 'object') return o;
+  const zaznam = o as Record<string, unknown>;
+  if (zaznam['response'] !== undefined) return zaznam['response'];
+  const volby = zaznam['choices'];
+  if (Array.isArray(volby) && volby.length > 0) {
+    const zprava = (volby[0] as Record<string, unknown> | undefined)?.['message'] as
+      | Record<string, unknown>
+      | undefined;
+    if (zprava?.['content'] !== undefined) return zprava['content'];
+  }
+  return null;
+}
+
 /** Zavolá free backend a vrátí naparsovaný JSON. */
 async function zdarma<T>(
   ai: Ai,
@@ -190,9 +213,15 @@ async function zdarma<T>(
       { role: 'system', content: sys },
       { role: 'user', content: user },
     ],
-  } as never)) as { response?: unknown };
-  const objekt = prvniJson<T>(odpoved.response ?? '');
-  if (objekt === null) throw new ChybaAi('Model ' + model + ' nevrátil JSON.');
+  } as never)) as unknown;
+  const objekt = prvniJson<T>(textOdpovedi(odpoved));
+  if (objekt === null) {
+    // Do hlášky patří i kus toho, co model opravdu vrátil — jinak se u nového
+    // modelu s jiným tvarem odpovědi nedá poznat, kde se text ztratil.
+    throw new ChybaAi(
+      `Model ${model} nevrátil JSON. Vrátil: ${JSON.stringify(odpoved).slice(0, 300)}`,
+    );
+  }
   return objekt;
 }
 

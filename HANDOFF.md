@@ -2,6 +2,33 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — gpt-oss vracel odpověď jinam, než se hledala
+
+Uživatel dostal na „chci vidět graf nákladů" jen **„Uložení se nepovedlo"**. Tři
+chyby v jedné obrazovce:
+
+1. **Tvar odpovědi se liší model od modelu.** Klasické instruct modely vracejí
+   `{ response }`, ale OpenAI-kompatibilní `gpt-oss-120b` odpovídá
+   `{ choices: [{ message: { content, reasoning } }] }` — uvažování zvlášť,
+   odpověď v `content`. Model odpovídal celou dobu správně, jen se text hledal
+   jinde. Nová `textOdpovedi` v `src/ai.ts` zná oba tvary a u neznámého vrátí
+   `null`, ať se to pozná.
+2. **Okno detail chyby zahodilo.** Ukazovalo jen `chyba`, ne `detail` — na
+   obrazovce zbylo obecné „nepovedlo se" bez jediného vodítka. Teď se zobrazí
+   obojí, a hláška „model nevrátil JSON" nese i kus toho, co model opravdu
+   vrátil; u dalšího modelu s jiným tvarem to bude vidět hned.
+3. **„Uložení se nepovedlo" u dotazu, který nic neukládá.** Obecná věta
+   z `popisChyby` posílala člověka hledat chybu do databáze, kde žádná není.
+
+**Jak se to našlo:** ostrá databáze měla `ai_model = '@cf/openai/gpt-oss-120b'` —
+uživatel si model vybral v Nastavení. Stejná hodnota v lokální D1 chybu okamžitě
+zopakovala. **Nastavení z ostré databáze je první místo, kam se dívat**, když něco
+funguje v dev a ne v produkci; kód byl v obou případech stejný.
+
+**Ověřeno po opravě** proti běžícímu Workeru na všech třech free modelech
+(70B, 8B, gpt-oss 120B): „kolik padne na energie" → 12 200 Kč u všech,
+„chci vidět graf nákladů" → nakreslený graf i u gpt-oss.
+
 ## 2026-08-21 — model se vybírá, graf se kreslí, Enter odesílá
 
 **Špatné odpovědi měly tři různé příčiny** a stálo za to je oddělit:

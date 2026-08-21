@@ -593,7 +593,14 @@ async function dotazPosli() {
       body: JSON.stringify({ otazka: otazka }),
     });
     const data = await odpoved.json();
-    if (!odpoved.ok) { stav.textContent = data.chyba || 'Dotaz se nepovedlo zpracovat.'; return; }
+    if (!odpoved.ok) {
+      // Detail je ta část, která říká proč. Bez něj zbyde na obrazovce holé
+      // „nepovedlo se to" a člověk nemá co opravit.
+      stav.textContent = [data.chyba || 'Dotaz se nepovedlo zpracovat.', data.detail]
+        .filter(Boolean)
+        .join(' ');
+      return;
+    }
     dotazPridej(otazka, data);
     dotazPrvek('ai-otazka').value = '';
     stav.textContent = '';
