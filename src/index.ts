@@ -8,7 +8,7 @@
  * Rozvržení cest viz README.md, pravidla párování viz docs/ARCHITECTURE.md.
  */
 import { renderNaklady } from './admin-page.js';
-import { AI_VOLBY, ctxAi, popisBackendu, poradiBackendu } from './ai.js';
+import { AI_VOLBY, ctxAi, popisBackendu } from './ai.js';
 import { dobehniAutomatiku, kdyZavreMesic } from './automat.js';
 import { podkladKomentare, zhodnotVyvoj } from './komentar.js';
 import { odpovezNaDotaz, podkladDotazu } from './dotaz.js';
@@ -379,9 +379,8 @@ export default {
 
       try {
         if (request.method === 'GET' && path === '/admin') {
-          const [prehled, nastaveni] = await Promise.all([nactiPrehled(env.DB), nactiNastaveni(env.DB)]);
+          const prehled = await nactiPrehled(env.DB);
           const vybrano = Number(url.searchParams.get('vybrano') ?? '');
-          const kontext = await kontextAi(env, nastaveni.ai_provider);
           return html(
             renderNaklady(
               prehled,
@@ -390,7 +389,6 @@ export default {
               env.GIT_COMMIT ?? 'dev',
               Number.isInteger(vybrano) && vybrano > 0 ? vybrano : null,
               url.searchParams.get('stav'),
-              poradiBackendu(kontext).length === 0,
             ),
           );
         }

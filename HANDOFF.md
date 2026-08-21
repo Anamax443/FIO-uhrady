@@ -34,7 +34,15 @@ i filtrují.
 3. **`zaskok` se ztrácel po cestě.** `odpovezNaDotaz` i `zhodnotVyvoj` skládaly nový
    výsledek a informaci o selhaném backendu zahodily.
 
-**Okno „Zeptat se AI"** na Nákladech domu (`src/dotaz.ts`, `POST /api/dotaz`). Modální,
+**Okno „Zeptat se AI"** je ve **společném rámu** (`shell` v `src/ui.ts`), takže tlačítko
+je v titulní liště **na každé stránce správy** — první pokus ho měl jen v liště Nákladů
+domu a na Přehledu, kde ho člověk hledá jako první, nebyl. Osobní přehled `/v/{token}`
+si HTML skládá sám, takže tam okno není. Pozor na dvě pasti: názvy ve skriptu rámu mají
+předponu `dotaz`, protože `const` na nejvyšší úrovni je sdílený mezi všemi bloky
+`<script>` na stránce, a stav dotazu má id `ai-stav-dotazu` — `ai-stav` už na Přehledu
+patří tlačítku komentáře. Kontrola: kolize jmen a duplicitní `id` napříč bloky se dají
+vytáhnout ze staženého HTML, viz zádrhel č. 3.
+Implementace v `src/dotaz.ts`, endpoint `POST /api/dotaz`. Modální,
 vlákno otázek a odpovědí, Ctrl+Enter odešle. Drží stejná pravidla jako komentář:
 model **nepočítá** (součty i kategorie dostane hotové) a **věta s číslem, které
 v podkladu není, se označí ⚠**. Ověřeno, že to není teorie — na dotaz „kolik padne na
@@ -60,6 +68,10 @@ tlumený a psané u něj „nevymáhá se"** — je to zůstatek, ne dluh k dopl
 **Jak zkoušet AI lokálně:** Workers AI binding v `wrangler dev` hlásí „Binding AI needs
 to be run remotely". Dočasně `"ai": { "binding": "AI", "experimental_remote": true }`
 ve `wrangler.jsonc` a po zkoušce vrátit zpátky (nasazená konfigurace se tím nemění).
+
+**Zpětný zásah do rámu:** backtick uvnitř komentáře ve skriptu ukončil template literal
+a rozbil `ui.ts`. Ve skriptech skládaných do řetězce se v komentářích píšou uvozovky,
+ne backticky.
 
 **Bez migrace** — `claude_klic` je řádek v `settings`, žádná změna schématu.
 

@@ -147,6 +147,26 @@ tfoot td { position: sticky; bottom: 0; height: 25px; padding: 0 8px; background
 input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); flex: none; }
 
 /* hlášky */
+/* Okno na dotazy pro AI. Je ve společném rámu, takže je na každé stránce
+   správy — dotaz na náklady může přijít odkudkoli, ne jen ze seznamu položek. */
+dialog.okno { width: min(700px, 94vw); max-height: 86vh; padding: 0; border: 1px solid var(--border); border-radius: 3px; background: var(--pane); color: var(--text); font: inherit; box-shadow: 0 18px 50px rgba(20, 30, 40, .3); }
+dialog.okno::backdrop { background: rgba(20, 30, 40, .34); }
+dialog.okno .telo { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+dialog.okno .panehead .zavrit { margin-left: auto; height: 20px; }
+.dotaz-zadani { display: flex; flex-direction: column; gap: 6px; }
+.dotaz-zadani textarea { width: 100%; min-height: 60px; resize: vertical; }
+.dotaz-lista { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dotaz-vlakno { display: flex; flex-direction: column; gap: 10px; max-height: 42vh; overflow-y: auto; }
+.dotaz-blok { display: flex; flex-direction: column; gap: 4px; padding-bottom: 9px; border-bottom: 1px solid var(--border-soft); }
+.dotaz-blok:last-child { border-bottom: 0; padding-bottom: 0; }
+.dotaz-blok .otazka { font-weight: 600; }
+.dotaz-blok .odpoved { display: flex; flex-direction: column; gap: 3px; color: var(--text-dim); }
+/* Věta s číslem, které v podkladu není. Nemaže se — vypadl by kus odpovědi —
+   ale musí být poznat, že se na to číslo spolehnout nedá. */
+.dotaz-blok .veta.nejiste { color: var(--warn); }
+.dotaz-blok .veta.nejiste::before { content: "⚠ "; }
+.dotaz-blok .zdroj-odpovedi { color: var(--text-faint); font-size: 11.5px; }
+
 .hlaska { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--border); }
 /* Bez tohohle „display: flex" přebije [hidden] z prohlížeče a schovaná hláška
    zůstane viset na obrazovce i s textem, který už neplatí. */
@@ -186,6 +206,9 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
   .titlebar { position: sticky; top: 0; z-index: 20; }
   .titlebar .field, .titlebar .sep { display: none; }
   .titlebar .chip { display: none; }
+  /* Na úzkém displeji zůstane z tlačítka jen ikona — text by vytlačil hledání. */
+  #t-dotaz { padding: 0 6px; }
+  #t-dotaz .popisek { display: none; }
   .search { flex: 1; min-width: 0; }
   .search input { width: 100%; }
   .brand .org { display: none; }
@@ -385,6 +408,7 @@ ${SYMBOLY}
     ${s.listaExtra ?? ''}
     <span class="spacer"></span>
     ${s.vpravo ?? ''}
+    <button class="tbtn" type="button" id="t-dotaz" title="Zeptat se AI na náklady — jen čte, nic nemění"><svg class="icon icon-sm"><use href="#i-ai"/></svg><span class="popisek">Zeptat se AI</span></button>
     <span class="chip mono" id="hodiny" title="čas prohlížeče, běží živě">--:--:--</span>
     <span class="chip mono" title="nasazený commit — dá se ověřit proti gitu">${esc(s.commit)}</span>
   </header>
@@ -402,6 +426,29 @@ ${SYMBOLY}
   <footer class="status">${s.status}</footer>
 </div>
 
+<dialog class="okno" id="ai-okno" aria-labelledby="ai-nadpis">
+  <div class="panehead"><svg class="icon icon-sm"><use href="#i-ai"/></svg><span id="ai-nadpis">Zeptat se AI na náklady</span>
+    <button class="tbtn zavrit" type="button" id="ai-zavrit" title="Zavře okno (Esc)">Zavřít</button>
+  </div>
+  <div class="telo">
+    <div class="dotaz-zadani">
+      <label for="ai-otazka">Na co se chceš zeptat?</label>
+      <textarea id="ai-otazka" maxlength="500" placeholder="Třeba: Kolik měsíčně padne na energie? Proč je máma v mínusu? Která položka je největší?"></textarea>
+      <div class="dotaz-lista">
+        <button class="btn primary" type="button" id="ai-poslat" title="Odeslat dotaz (Ctrl+Enter)">Zeptat se</button>
+        <span class="note" id="ai-stav-dotazu"></span>
+      </div>
+    </div>
+    <div class="dotaz-vlakno" id="ai-vlakno"></div>
+    <span class="note">
+      Modelu jdou <b>náklady domu, rozpad na osoby a kredity</b> — včetně jmen, protože bez nich
+      se na většinu otázek odpovědět nedá. <b>Nejdou</b> čísla účtů, variabilní symboly, jednotlivé
+      platby z banky ani e-maily. Všechna čísla počítá aplikace a model je dostává hotová;
+      věta s číslem, které v podkladu není, se označí ⚠. <b>AI jen čte — nic nemění.</b>
+    </span>
+  </div>
+</dialog>
+
 <script>
 const app = document.querySelector('.app');
 const burger = document.getElementById('burger');
@@ -418,6 +465,91 @@ const hodiny = document.getElementById('hodiny');
 const tik = () => { hodiny.textContent = new Date().toLocaleTimeString('cs-CZ'); };
 tik();
 setInterval(tik, 1000);
+
+/* ---------- okno na dotazy pro AI ----------
+   Názvy jsou schválně s předponou "dotaz": stránky si skládají vlastní skript
+   a stejné jméno na nejvyšší úrovni by shodilo celý ten druhý blok. */
+const dotazOkno = document.getElementById('ai-okno');
+const dotazPrvek = (id) => document.getElementById(id);
+
+document.getElementById('t-dotaz').addEventListener('click', () => {
+  dotazOkno.showModal();
+  dotazPrvek('ai-otazka').focus();
+});
+document.getElementById('ai-zavrit').addEventListener('click', () => dotazOkno.close());
+dotazPrvek('ai-otazka').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void dotazPosli(); }
+});
+dotazPrvek('ai-poslat').addEventListener('click', () => void dotazPosli());
+
+/**
+ * Odpověď se skládá z uzlů přes textContent, ne přes innerHTML — text od modelu
+ * je cizí vstup a do stránky se nesmí dostat jako značky.
+ */
+function dotazPridej(otazka, data) {
+  const blok = document.createElement('div');
+  blok.className = 'dotaz-blok';
+
+  const nadpis = document.createElement('span');
+  nadpis.className = 'otazka';
+  nadpis.textContent = otazka;
+  blok.appendChild(nadpis);
+
+  const odpoved = document.createElement('div');
+  odpoved.className = 'odpoved';
+  for (const v of data.vety || []) {
+    const veta = document.createElement('span');
+    veta.className = 'veta' + (v.overeno ? '' : ' nejiste');
+    veta.textContent = v.text;
+    if (!v.overeno) veta.title = 'Věta obsahuje číslo, které v podkladu není — neber ji jako fakt.';
+    odpoved.appendChild(veta);
+  }
+  blok.appendChild(odpoved);
+
+  const zdroj = document.createElement('span');
+  zdroj.className = 'zdroj-odpovedi';
+  const nejistych = (data.vety || []).filter((v) => !v.overeno).length;
+  zdroj.textContent =
+    'odpovědělo: ' + data.backend +
+    (nejistych > 0 ? ' · ' + nejistych + ' věta s neověřeným číslem je označená ⚠' : '');
+  blok.appendChild(zdroj);
+
+  // Placený backend selhal a odpověď došla zdarma. Bez tohohle by to vypadalo
+  // stejně jako odpověď od Clauda a vypršelý klíč by si nikdo nevšiml.
+  if (data.zaskok) {
+    const zaskok = document.createElement('span');
+    zaskok.className = 'zdroj-odpovedi';
+    zaskok.textContent = 'zaskočil free backend — ' + data.zaskok;
+    blok.appendChild(zaskok);
+  }
+
+  dotazPrvek('ai-vlakno').appendChild(blok);
+  blok.scrollIntoView({ block: 'nearest' });
+}
+
+async function dotazPosli() {
+  const otazka = dotazPrvek('ai-otazka').value.trim();
+  const stav = dotazPrvek('ai-stav-dotazu');
+  if (otazka === '') { stav.textContent = 'Napiš, na co se chceš zeptat.'; return; }
+  dotazPrvek('ai-poslat').disabled = true;
+  stav.textContent = 'ptám se… (pár sekund)';
+  try {
+    const odpoved = await fetch('/api/dotaz', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ otazka: otazka }),
+    });
+    const data = await odpoved.json();
+    if (!odpoved.ok) { stav.textContent = data.chyba || 'Dotaz se nepovedlo zpracovat.'; return; }
+    dotazPridej(otazka, data);
+    dotazPrvek('ai-otazka').value = '';
+    stav.textContent = '';
+  } catch (e) {
+    stav.textContent = 'Server neodpověděl: ' + e.message;
+  } finally {
+    dotazPrvek('ai-poslat').disabled = false;
+  }
+}
 </script>
 ${s.skript ?? ''}
 </body>

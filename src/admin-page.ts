@@ -225,23 +225,6 @@ thead tr.filtry input, thead tr.filtry select { width: 100%; min-width: 0; font-
 .druh.d-preplatek .dot { background: var(--ok); }
 .prazdno { padding: 26px 18px; color: var(--text-dim); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 
-/* Okno na dotazy pro AI. Modální, ať je jasné, že se teď dělá jedna věc. */
-dialog.okno { width: min(700px, 94vw); max-height: 86vh; padding: 0; border: 1px solid var(--border); border-radius: 3px; background: var(--pane); color: var(--text); font: inherit; box-shadow: 0 18px 50px rgba(20, 30, 40, .3); }
-dialog.okno::backdrop { background: rgba(20, 30, 40, .34); }
-dialog.okno .telo { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
-.dotaz-zadani { display: flex; flex-direction: column; gap: 6px; }
-.dotaz-zadani textarea { width: 100%; min-height: 60px; resize: vertical; }
-.dotaz-lista { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dotaz-vlakno { display: flex; flex-direction: column; gap: 10px; max-height: 42vh; overflow-y: auto; }
-.dotaz-blok { display: flex; flex-direction: column; gap: 4px; padding-bottom: 9px; border-bottom: 1px solid var(--border-soft); }
-.dotaz-blok:last-child { border-bottom: 0; padding-bottom: 0; }
-.dotaz-blok .otazka { font-weight: 600; }
-.dotaz-blok .odpoved { display: flex; flex-direction: column; gap: 3px; color: var(--text-dim); }
-/* Věta s číslem, které v podkladu není. Nemaže se — vypadl by kus odpovědi —
-   ale musí být poznat, že se na to číslo spolehnout nedá. */
-.dotaz-blok .veta.nejiste { color: var(--warn); }
-.dotaz-blok .veta.nejiste::before { content: "⚠ "; }
-.dotaz-blok .zdroj-odpovedi { color: var(--text-faint); font-size: 11.5px; }
 
 .detail .body { padding: 9px 10px 12px; display: flex; flex-direction: column; gap: 9px; }
 .frow { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -589,7 +572,6 @@ export function renderNaklady(
   commit: string,
   vybrano: number | null = null,
   stav: string | null = null,
-  aiVypnuta = false,
 ): string {
   const s = spocitej(prehled);
 
@@ -647,10 +629,6 @@ export function renderNaklady(
         <button class="tbtn" type="button" id="t-duplikovat" title="Založí novou položku podle označené"><svg class="icon icon-sm"><use href="#i-copy"/></svg>Duplikovat</button>
         <button class="tbtn" type="button" id="t-smazat" title="Smaže označenou položku; záznam zůstane v historii změn"><svg class="icon icon-sm"><use href="#i-trash"/></svg>Smazat</button>
         <span class="sep"></span>
-        <button class="tbtn" type="button" id="t-dotaz"${
-          aiVypnuta ? ' disabled title="AI je vypnutá v Nastavení"' : ' title="Otevře okno, kde se dá zeptat na cokoli k nákladům — AI jen čte, nic nemění"'
-        }><svg class="icon icon-sm"><use href="#i-ai"/></svg>Zeptat se AI</button>
-        <span class="sep"></span>
         <a class="tbtn" href="/admin/export.csv" title="Stáhne všechny položky i s rozpadem na osoby jako CSV"><svg class="icon icon-sm"><use href="#i-export"/></svg>Export CSV</a>
       </div>
       <div class="hlaska" id="stranka-hlaska" hidden></div>
@@ -660,29 +638,7 @@ export function renderNaklady(
       </div>
       ${grid(prehled, s)}
     </section>
-    ${detail(prehled)}
-    <dialog class="okno" id="ai-okno" aria-labelledby="ai-nadpis">
-      <div class="panehead"><svg class="icon icon-sm"><use href="#i-ai"/></svg><span id="ai-nadpis">Zeptat se AI na náklady</span>
-        <button class="tbtn zavrit" type="button" id="ai-zavrit" style="margin-left:auto" title="Zavře okno (Esc)">Zavřít</button>
-      </div>
-      <div class="telo">
-        <div class="dotaz-zadani">
-          <label for="ai-otazka">Na co se chceš zeptat?</label>
-          <textarea id="ai-otazka" maxlength="500" placeholder="Třeba: Kolik měsíčně padne na energie? Proč je máma v mínusu? Která položka je největší?"></textarea>
-          <div class="dotaz-lista">
-            <button class="btn primary" type="button" id="ai-poslat" title="Odeslat dotaz (Ctrl+Enter)">Zeptat se</button>
-            <span class="note" id="ai-stav"></span>
-          </div>
-        </div>
-        <div class="dotaz-vlakno" id="ai-vlakno"></div>
-        <span class="note">
-          Modelu jdou <b>náklady domu, rozpad na osoby a kredity</b> — včetně jmen, protože bez nich
-          se na většinu otázek odpovědět nedá. <b>Nejdou</b> čísla účtů, variabilní symboly, jednotlivé
-          platby z banky ani e-maily. Všechna čísla počítá aplikace a model je dostává hotová;
-          věta s číslem, které v podkladu není, se označí ⚠. <b>AI jen čte — nic nemění.</b>
-        </span>
-      </div>
-    </dialog>`;
+    ${detail(prehled)}`;
 
   const status = `
     <span>Pravidelné <b>${formatKc(s.mesicneCelkem)}</b>/měs</span>
@@ -897,95 +853,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || !detailOtevreny()) return;
   // Otevřené okno na dotazy si Esc bere pro sebe, jinak by jedno stisknutí
   // zavřelo obojí najednou.
-  if (oknoAi.open) return;
+  if (el('ai-okno').open) return;
   // Uvnitř formuláře Esc nezavírá — rozepsaná změna by zmizela bez varování.
   if (e.target.closest && e.target.closest('.detail')) return;
   e.preventDefault();
   zavriDetail();
 });
 
-/* ---------- okno na dotazy pro AI ---------- */
-
-const oknoAi = el('ai-okno');
-const tlacitkoDotaz = el('t-dotaz');
-
-if (!tlacitkoDotaz.disabled) {
-  tlacitkoDotaz.addEventListener('click', () => { oknoAi.showModal(); el('ai-otazka').focus(); });
-}
-el('ai-zavrit').addEventListener('click', () => oknoAi.close());
-el('ai-poslat').addEventListener('click', () => void zeptejSeAi());
-el('ai-otazka').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void zeptejSeAi(); }
-});
-
-/**
- * Odpověď se skládá z uzlů přes textContent, ne přes innerHTML — text od modelu
- * je cizí vstup a do stránky se nesmí dostat jako značky.
- */
-function pridejDoVlakna(otazka, data) {
-  const blok = document.createElement('div');
-  blok.className = 'dotaz-blok';
-
-  const nadpis = document.createElement('span');
-  nadpis.className = 'otazka';
-  nadpis.textContent = otazka;
-  blok.appendChild(nadpis);
-
-  const odpoved = document.createElement('div');
-  odpoved.className = 'odpoved';
-  for (const v of data.vety || []) {
-    const veta = document.createElement('span');
-    veta.className = 'veta' + (v.overeno ? '' : ' nejiste');
-    veta.textContent = v.text;
-    if (!v.overeno) veta.title = 'Věta obsahuje číslo, které v podkladu není — neber ji jako fakt.';
-    odpoved.appendChild(veta);
-  }
-  blok.appendChild(odpoved);
-
-  const zdroj = document.createElement('span');
-  zdroj.className = 'zdroj-odpovedi';
-  const nejistych = (data.vety || []).filter((v) => !v.overeno).length;
-  zdroj.textContent =
-    'odpovědělo: ' + data.backend +
-    (nejistych > 0 ? ' · ' + nejistych + ' věta s neověřeným číslem je označená ⚠' : '');
-  blok.appendChild(zdroj);
-
-  // Placený backend selhal a odpověď došla zdarma. Bez tohohle by to vypadalo
-  // stejně jako odpověď od Clauda a vypršelý klíč by si nikdo nevšiml.
-  if (data.zaskok) {
-    const zaskok = document.createElement('span');
-    zaskok.className = 'zdroj-odpovedi';
-    zaskok.textContent = 'zaskočil free backend — ' + data.zaskok;
-    blok.appendChild(zaskok);
-  }
-
-  el('ai-vlakno').appendChild(blok);
-  blok.scrollIntoView({ block: 'nearest' });
-}
-
-async function zeptejSeAi() {
-  const otazka = el('ai-otazka').value.trim();
-  const stav = el('ai-stav');
-  if (otazka === '') { stav.textContent = 'Napiš, na co se chceš zeptat.'; return; }
-  el('ai-poslat').disabled = true;
-  stav.textContent = 'ptám se…';
-  try {
-    const odpoved = await fetch('/api/dotaz', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ otazka: otazka }),
-    });
-    const data = await odpoved.json();
-    if (!odpoved.ok) { stav.textContent = data.chyba || 'Dotaz se nepovedlo zpracovat.'; return; }
-    pridejDoVlakna(otazka, data);
-    el('ai-otazka').value = '';
-    stav.textContent = '';
-  } catch (e) {
-    stav.textContent = 'Server neodpověděl: ' + e.message;
-  } finally {
-    el('ai-poslat').disabled = false;
-  }
-}
 
 el('d-zpet').addEventListener('click', () => ukazPolozku(vybraneId));
 el('t-nova').addEventListener('click', () => {
