@@ -8,9 +8,10 @@
  * Rozvržení cest viz README.md, pravidla párování viz docs/ARCHITECTURE.md.
  */
 import { renderNaklady } from './admin-page.js';
-import { AI_VOLBY, ctxAi, popisBackendu } from './ai.js';
+import { AI_VOLBY, ctxAi, popisBackendu, poradiBackendu } from './ai.js';
 import { dobehniAutomatiku, kdyZavreMesic } from './automat.js';
 import { podkladKomentare, zhodnotVyvoj } from './komentar.js';
+import { odpovezNaDotaz, podkladDotazu } from './dotaz.js';
 import {
   kdoZeCookie,
   maPin,
@@ -26,6 +27,7 @@ import {
   ChybaVstupu,
   historiePolozky,
   nactiAudit,
+  nactiClaudeKlic,
   nactiFioToken,
   nactiPlatby,
   nactiNastaveni,
@@ -33,6 +35,7 @@ import {
   nactiPrehled,
   overPolozku,
   smazPolozku,
+  ulozClaudeKlic,
   ulozFioToken,
   posledniBeh,
   priradPlatbu,
@@ -269,6 +272,14 @@ async function stavVyrovnani(db: D1Database) {
   };
 }
 
+/**
+ * AI kontext i s klíčem uloženým v Nastavení. Klíč se nesmí dostat do
+ * `Nastaveni` (to jde do stránky), proto se čte zvlášť až tady.
+ */
+async function kontextAi(env: Env, volba: string) {
+  return ctxAi(env, volba, await nactiClaudeKlic(env.DB));
+}
+
 async function telo(request: Request): Promise<unknown> {
   try {
     return await request.json();
@@ -368,8 +379,9 @@ export default {
 
       try {
         if (request.method === 'GET' && path === '/admin') {
-          const prehled = await nactiPrehled(env.DB);
+          const [prehled, nastaveni] = await Promise.all([nactiPrehled(env.DB), nactiNastaveni(env.DB)]);
           const vybrano = Number(url.searchParams.get('vybrano') ?? '');
+          const kontext = await kontextAi(env, nastaveni.ai_provider);
           return html(
             renderNaklady(
               prehled,
@@ -378,6 +390,7 @@ export default {
               env.GIT_COMMIT ?? 'dev',
               Number.isInteger(vybrano) && vybrano > 0 ? vybrano : null,
               url.searchParams.get('stav'),
+              poradiBackendu(kontext).length === 0,
             ),
           );
         }
@@ -398,6 +411,9 @@ export default {
               url.origin,
               url.searchParams.get('stav'),
               Boolean(env.AI),
+              // Klíč z Nastavení i secret z prostředí — pro popisek je jedno,
+              // odkud je, důležité je, jestli je čím zaplatit.
+              nastaveni.claude_klic_naznak !== null || Boolean(env.ANTHROPIC_API_KEY),
               Boolean(env.ANTHROPIC_API_KEY),
             ),
           );
@@ -801,24 +817,59 @@ export default {
           const s = await stavVyrovnani(env.DB);
           // Modelu jdou jen náklady domu — žádná jména, žádná čísla účtů.
           const podklad = podkladKomentare(s.prehled, s.uzaverky);
-          const vysledek = await zhodnotVyvoj(ctxAi(env, s.nastaveni.ai_provider), podklad);
+          const vysledek = await zhodnotVyvoj(await kontextAi(env, s.nastaveni.ai_provider), podklad);
+          // Když zaskočil free backend za placený, musí to být vidět i u uloženého
+          // komentáře — jinak vypadá stejně jako ten, o který si člověk řekl.
+          const cim =
+            popisBackendu(vysledek.backend) +
+            (vysledek.zaskok ? ' (zaskok za placený backend, ten selhal)' : '');
           const ulozit = JSON.stringify({
             shrnuti: vysledek.data.shrnuti,
             body: vysledek.data.body,
             kdy: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            backend: popisBackendu(vysledek.backend),
+            backend: cim,
           });
           await ulozNastaveni(
             env.DB,
             'ai_komentar',
             ulozit,
             kdo,
-            `Spočítán komentář k vývoji nákladů (${popisBackendu(vysledek.backend)})`,
+            `Spočítán komentář k vývoji nákladů (${cim})`,
             // Text komentáře do historie nepatří — je dlouhý a mění se při
             // každém přepočtu, takže by ostatní změny zavalil.
             true,
           );
           return json({ ok: true, backend: vysledek.backend });
+        }
+
+        if (request.method === 'POST' && path === '/api/claude-klic') {
+          const data = (await telo(request)) as { klic?: string };
+          await ulozClaudeKlic(env.DB, String(data.klic ?? ''), kdo);
+          return json({ ok: true });
+        }
+
+        if (request.method === 'POST' && path === '/api/dotaz') {
+          const d = (await telo(request)) as { otazka?: string };
+          const s = await stavVyrovnani(env.DB);
+          // Jen čtení: dotaz nic nemění, takže se ani nikam neukládá.
+          const podklad = podkladDotazu(
+            s.prehled,
+            s.zalohy,
+            s.zaplaceno,
+            s.uzaverky,
+            s.nastaveni.vyuctovani_od,
+          );
+          const vysledek = await odpovezNaDotaz(
+            await kontextAi(env, s.nastaveni.ai_provider),
+            podklad,
+            String(d.otazka ?? ''),
+          );
+          return json({
+            ok: true,
+            vety: vysledek.data.vety,
+            backend: popisBackendu(vysledek.backend),
+            zaskok: vysledek.zaskok ?? null,
+          });
         }
 
         if (request.method === 'GET' && path === '/admin/export.csv') {

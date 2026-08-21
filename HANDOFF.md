@@ -2,6 +2,67 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — detail na vyžádání, dotazy pro AI a klíč ke Claude v Nastavení
+
+**Kredit mámy ověřen** nezávislým přepočtem proti ostré databázi (kontrola: dědových
+7 205 Kč sedí na to, co ukazuje appka). Máma **není v kreditu** — za srpen jí chybí
+**2 933 Kč**: podíl 8 343 Kč (její + Eliščin), vloženo 5 410 Kč (5 309 Kč ze svého
++ 101 Kč na účet). Appka počítá správně. Mimochodem: **všech 13 položek už má
+`zdroj_uhrady = 'osoba'`** — uživatel je ráno jednu po druhé přepnul (audit 07:16–09:02),
+není to chyba ukládání.
+
+**Detail položky se otevírá až na vyžádání.** Panel dřív zabíral 366 px pořád, i když
+o něj nikdo nestál. Nově je zavřený a tabulka má celou šířku; otevře ho **dvojklik na
+řádek, Enter, tlačítko Upravit, Přidat položku nebo Duplikovat**. Jeden klik řádek jen
+označí. Pozor na past: **když detail otevřený je, přepne ho i jeden klik** — jinak by
+šlo uložit formulář jedné položky pod id druhé. Zavírá Zavřít nebo Esc, a Esc **uvnitř
+formuláře nezavírá**, aby rozepsaná změna nezmizela.
+
+**Fakturu platí a Zaplaceno z jsou sloupce**, ne jen pole v detailu. U třinácti položek
+se dřív nedalo porovnat, kdo co platí, bez otevírání každé zvlášť. Oba sloupce se řadí
+i filtrují.
+
+**Tři chyby, které z toho vypadly:**
+1. **`hlaska('')` nic neschovala.** `.hlaska` má `display: flex`, což přebije `[hidden]`
+   z prohlížeče — hláška zůstala viset i s textem, který už neplatil. Že „Uloženo v…"
+   po uložení vůbec bylo vidět, byl vedlejší účinek téhle chyby: `ukazPolozku` ji hned
+   po nastavení mazal. Přidáno `.hlaska[hidden] { display: none }` a hláška po
+   uložení/smazání se přesunula **na stránku** (`#stranka-hlaska`) — v panelu, který
+   může být zavřený, by ji nikdo neviděl.
+2. **Volba „bez kategorie" ve filtru nefiltrovala.** Prázdná hodnota šla do `<option>`
+   jako `value=""`, což filtr vyhodnocuje jako „vše". Teď je hodnotou popisek.
+3. **`zaskok` se ztrácel po cestě.** `odpovezNaDotaz` i `zhodnotVyvoj` skládaly nový
+   výsledek a informaci o selhaném backendu zahodily.
+
+**Okno „Zeptat se AI"** na Nákladech domu (`src/dotaz.ts`, `POST /api/dotaz`). Modální,
+vlákno otázek a odpovědí, Ctrl+Enter odešle. Drží stejná pravidla jako komentář:
+model **nepočítá** (součty i kategorie dostane hotové) a **věta s číslem, které
+v podkladu není, se označí ⚠**. Ověřeno, že to není teorie — na dotaz „kolik padne na
+Energie" free model napřed vymyslel 1 700 Kč a pojistka to chytila; po doplnění součtů
+po kategoriích do podkladu vrátil 12 200 Kč a 9 624 Kč, což sedí na tabulku.
+Na rozdíl od komentáře jdou modelu **i jména osob a jejich podíly** — bez nich se na
+dotaz správce odpovědět nedá. Čísla účtů, VS, jednotlivé platby ani e-maily ne.
+Odpověď se skládá přes `textContent`, ne `innerHTML` — text od modelu je cizí vstup.
+
+**Klíč ke Claude jde vložit v Nastavení**, stejně jako token do Fio: uložený se nedá
+přečíst, jen přepsat nebo smazat, do auditu jde jen fakt, že se měnil. Klíč z Nastavení
+má přednost před `ANTHROPIC_API_KEY` z prostředí. **Bez AI aplikace nezůstane** —
+ověřeno s neplatným klíčem: Claude vrátil 401, odpověď dopočítal free Workers AI
+a u odpovědi je vidět „zaskočil free backend" i důvod.
+
+**V grafu „Kdo kolik platí" přibyl třetí pruh — zaplaceno z vlastní kapsy** (měsíčně).
+Bez něj vypadal děda, který kupuje uhlí za 42 000 Kč, jako by neplatil nic.
+A **kredit se teď ukazuje u všech**, i u těch, od koho příspěvky nechodí na účet.
+Dřív u nich svítilo „nesleduje se" a nešlo poznat, jestli jsou v plusu, nebo v mínusu.
+Rozdíl zůstal ve čtení, ne v tom, jestli je číslo vidět: **mínus u nesledovaného je
+tlumený a psané u něj „nevymáhá se"** — je to zůstatek, ne dluh k doplacení.
+
+**Jak zkoušet AI lokálně:** Workers AI binding v `wrangler dev` hlásí „Binding AI needs
+to be run remotely". Dočasně `"ai": { "binding": "AI", "experimental_remote": true }`
+ve `wrangler.jsonc` a po zkoušce vrátit zpátky (nasazená konfigurace se tím nemění).
+
+**Bez migrace** — `claude_klic` je řádek v `settings`, žádná změna schématu.
+
 ## 2026-08-21 — proč máma neměla kredit
 
 Dotaz od uživatele nad novým grafem: proč u mámy svítí „nesleduje se", když

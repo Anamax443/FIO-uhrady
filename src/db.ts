@@ -14,6 +14,8 @@ export interface Nastaveni {
   nazev_domu: string;
   /** jen poslední znaky — celý token se z databáze do UI nikdy neposílá */
   fio_token_naznak: string | null;
+  /** náznak klíče ke Claude — celý klíč se do stránky nikdy nedostane */
+  claude_klic_naznak: string | null;
   sync_window_days: number;
   /** od kterého měsíce se počítají příspěvky, 'YYYY-MM' */
   vyuctovani_od: string;
@@ -712,9 +714,11 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
   }>();
   const mapa = new Map(results.map((r) => [r.klic, r.hodnota]));
   const token = mapa.get('fio_token');
+  const klicAi = mapa.get('claude_klic');
   return {
     nazev_domu: mapa.get('nazev_domu') ?? 'dům',
     fio_token_naznak: token ? naznak(token) : null,
+    claude_klic_naznak: klicAi ? naznak(klicAi) : null,
     sync_window_days: Number(mapa.get('sync_window_days') ?? '14'),
     vyuctovani_od: mapa.get('vyuctovani_od') ?? new Date().toISOString().slice(0, 7),
     rezerva_procent: Number(mapa.get('rezerva_procent') ?? '10'),
@@ -810,6 +814,21 @@ export async function nactiFioToken(db: D1Database): Promise<string | null> {
     .prepare("select hodnota from settings where klic = 'fio_token'")
     .first<{ hodnota: string }>();
   return row?.hodnota ?? null;
+}
+
+/**
+ * Celý klíč ke Claude — jen pro volání API, nikdy ne do stránky.
+ *
+ * Klíč vložený v Nastavení má přednost před `ANTHROPIC_API_KEY` z prostředí:
+ * co si správce zadal v aplikaci, je to novější a nemá ho přebíjet secret,
+ * o kterém v UI nikde není vidět.
+ */
+export async function nactiClaudeKlic(db: D1Database): Promise<string | null> {
+  const row = await db
+    .prepare("select hodnota from settings where klic = 'claude_klic'")
+    .first<{ hodnota: string }>();
+  const klic = row?.hodnota?.trim();
+  return klic ? klic : null;
 }
 
 export interface Platba {
@@ -1431,6 +1450,52 @@ export async function ulozIdentifikaci(
         .join('; '),
       pred,
       po,
+    ),
+  ]);
+}
+
+/**
+ * Klíč ke Claude. Do auditu jde jen fakt, že se měnil, ne hodnota.
+ *
+ * Prázdná hodnota klíč **smaže** — správce ho musí umět odebrat, aniž by lezl
+ * do databáze. Bez klíče appka spadne zpátky na free backend, takže se tím
+ * AI nevypne, jen přestane být za co platit.
+ */
+export async function ulozClaudeKlic(db: D1Database, klic: string, kdo: string): Promise<void> {
+  const cisty = klic.trim();
+
+  if (cisty === '') {
+    await db.batch([
+      db.prepare("delete from settings where klic = 'claude_klic'"),
+      auditStatement(db, kdo, 'zmena', 'nastaveni', 'claude_klic', 'Smazán klíč ke Claude — AI poběží zdarma přes Workers AI', null, null),
+    ]);
+    return;
+  }
+
+  if (!cisty.startsWith('sk-ant-')) {
+    throw new ChybaVstupu('Klíč od Anthropic začíná „sk-ant-“ — zkontroluj, jestli se zkopíroval celý a ten správný.');
+  }
+  if (cisty.length < 40) throw new ChybaVstupu('Klíč je kratší, než má být — zkopíroval se celý?');
+  if (/\s/.test(cisty)) throw new ChybaVstupu('V klíči je mezera nebo zalomení řádku — zkopíruj ho znovu.');
+
+  await db.batch([
+    db
+      .prepare(
+        `insert into settings (klic, hodnota, changed_at, changed_by)
+         values ('claude_klic', ?, datetime('now'), ?)
+         on conflict(klic) do update set hodnota = excluded.hodnota,
+              changed_at = excluded.changed_at, changed_by = excluded.changed_by`,
+      )
+      .bind(cisty, kdo),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'nastaveni',
+      'claude_klic',
+      `Vložen klíč ke Claude (končí na ${cisty.slice(-4)})`,
+      null,
+      null,
     ),
   ]);
 }

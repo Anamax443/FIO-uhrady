@@ -148,6 +148,9 @@ input[type="checkbox"] { width: 13px; height: 13px; margin: 0; accent-color: var
 
 /* hlášky */
 .hlaska { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-bottom: 1px solid var(--border); }
+/* Bez tohohle „display: flex" přebije [hidden] z prohlížeče a schovaná hláška
+   zůstane viset na obrazovce i s textem, který už neplatí. */
+.hlaska[hidden] { display: none; }
 .hlaska.ok { background: var(--accent-soft); }
 .hlaska.chyba { background: rgba(169, 59, 49, .13); color: var(--crit); }
 
@@ -235,6 +238,8 @@ export const SYMBOLY = `
 <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.4v4M8 4.9h.01"/></symbol>
 <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.4"/><path d="m10.5 10.5 3.4 3.4"/></symbol>
 <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 2.8v10.4M2.8 8h10.4"/></symbol>
+<symbol id="i-edit" viewBox="0 0 16 16"><path d="M11.4 2.3a1.6 1.6 0 0 1 2.3 2.3L5.6 12.7l-3 .7.7-3z"/><path d="M10.2 3.5 12.5 5.8"/></symbol>
+<symbol id="i-ai" viewBox="0 0 16 16"><path d="M2.4 3.4h11.2v7.4H8l-3.4 2.8v-2.8H2.4z"/><path d="M6.2 6.2h3.6M6.2 8.4h2.2"/></symbol>
 <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.4" y="5.4" width="8.2" height="8.2" rx="1"/><path d="M10.6 5.4V3.4a1 1 0 0 0-1-1H3.4a1 1 0 0 0-1 1v6.2a1 1 0 0 0 1 1h2"/></symbol>
 <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.8 4.2h10.4M6.2 4.2V2.8h3.6v1.4M4.2 4.2l.7 9h6.2l.7-9"/></symbol>
 <symbol id="i-export" viewBox="0 0 16 16"><path d="M8 10.6V2.4M5.2 5.2 8 2.4l2.8 2.8"/><path d="M2.8 10.2v2.4a1 1 0 0 0 1 1h8.4a1 1 0 0 0 1-1v-2.4"/></symbol>

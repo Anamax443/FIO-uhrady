@@ -2,7 +2,7 @@
  * Zbylé stránky správy: Přehled, Osoby, Příspěvky a vyrovnání,
  * Log synchronizace a O aplikaci.
  */
-import { spocitej } from './admin-page.js';
+import { spocitej, vlozenoZeSveho } from './admin-page.js';
 import { zalohaVMesici, type Beh, type Nastaveni, type Uzaverka, type Zaloha } from './db.js';
 import { formatKc, formatKcZnamenko, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
 import { dleRodu, type Osoba, type Prehled } from './model.js';
@@ -24,6 +24,12 @@ export interface RadekVyrovnani {
   predepsano: number;
   /** skutečný podíl na nákladech za tytéž měsíce */
   skutecne: number;
+  /**
+   * Kolik ten člověk **v tomhle měsíci** platí ze své kapsy (položky se
+   * `zdroj_uhrady = 'osoba'`). Měsíčně, aby to šlo porovnat s podílem
+   * a zálohou — dohromady je teprve vidět, čím se kdo skládá.
+   */
+  zeSveho: number;
   zaplaceno: number;
   /** co zbylo z minulého vyúčtování mimo zálohu; + = doplatit, − = má k dobru */
   zustatek: number;
@@ -121,6 +127,8 @@ export function vyrovnani(
   }
 
   const tedSouhrn = spocitej(prehled, tentoMesic);
+  // Za jediný měsíc, ne za celé období — pruh vedle měsíčního podílu.
+  const zeSvehoMesicne = vlozenoZeSveho(prehled, tentoMesic, tentoMesic);
 
   const radky = prehled.osoby
     .filter((o) => (o.pod_member_id ?? null) === null)
@@ -148,6 +156,7 @@ export function vyrovnani(
         zustatek,
         rozdil: predepsano + zustatek - uhrazeno,
         skutecne: skutecneZaOsobu.get(osoba.id) ?? 0,
+        zeSveho: sectiSDetmi(osoba, zeSvehoMesicne),
         sledovat: Boolean(osoba.je_platce),
         zastupuje: prehled.osoby
           .filter((d) => (d.pod_member_id ?? null) === osoba.id)
@@ -184,6 +193,9 @@ const STYL_PREHLED = `
 .pruh i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; }
 .pruh.podil i { background: var(--accent); opacity: .85; }
 .pruh.zaloha i { background: var(--ok); opacity: .7; }
+/* Nákup ze svého — reálné peníze do domácnosti stejně jako platba příkazem.
+   Bez tohohle pruhu vypadal děda, který kupuje uhlí, jako by neplatil nic. */
+.pruh.zesveho i { background: var(--warn); opacity: .75; }
 .legenda-pruhu { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; padding-left: 144px; }
 .legenda-pruhu span { display: flex; align-items: center; gap: 5px; }
 .legenda-pruhu i { width: 11px; height: 9px; border-radius: 2px; display: inline-block; }
@@ -193,6 +205,10 @@ const STYL_PREHLED = `
 .stav-kredit.plus { color: var(--ok); }
 .stav-kredit.minus { color: var(--crit); }
 .stav-kredit .tlumene { color: var(--text-dim); }
+/* Mínus u toho, od koho příspěvky nechodí na účet: číslo musí být vidět,
+   ale není to dluh k vymáhání — proto tlumeně, ne červeně. */
+.stav-kredit.nevymaha { color: var(--text-dim); }
+.stav-kredit .rozpis { color: var(--text-faint); font-weight: 400; }
 .stav-kredit small { display: block; font-weight: 400; font-family: var(--ui); font-size: 10.5px; color: var(--text-faint); }
 .ai { border-bottom: 1px solid var(--border); }
 .ai .telo-ai { padding: 10px 12px 13px; display: flex; flex-direction: column; gap: 7px; max-width: 82ch; }
@@ -214,25 +230,29 @@ const STYL_PREHLED = `
 function grafKdoKolik(radky: RadekVyrovnani[], mesicu: number): string {
   if (radky.length === 0) return '';
   // Měřítko drží největší z obou veličin, ať jsou pruhy porovnatelné mezi lidmi.
-  const max = Math.max(...radky.flatMap((r) => [r.mesicne, r.zaloha]), 1);
+  const max = Math.max(...radky.flatMap((r) => [r.mesicne, r.zaloha, r.zeSveho]), 1);
   const sirka = (v: number): number => Math.max(v > 0 ? 2 : 0, Math.round((v / max) * 100));
 
   const radek = (r: RadekVyrovnani): string => {
     const kredit = r.zaplaceno - r.skutecne;
-    // U toho, od koho příspěvky nechodí na účet, se dluh nesleduje — skládá se
-    // jinak a narůstající číslo by nic neznamenalo. Když ale reálné peníze dal
-    // (nákup ze svého), je potřeba ukázat aspoň obě čísla; jinak u něj svítí
-    // holé „nesleduje se" a nikdo nepozná, jestli je v plusu, nebo v mínusu.
-    const stav =
-      r.sledovat || kredit > 0
-        ? `<span class="stav-kredit ${kredit > 0 ? 'plus' : kredit < 0 ? 'minus' : ''}">${formatKc(
-            Math.abs(kredit),
-          )}<small>${kredit > 0 ? 'má k dobru' : kredit < 0 ? 'chybí' : 'vyrovnáno'}</small></span>`
-        : r.zaplaceno > 0
-          ? `<span class="stav-kredit"><span class="tlumene">${formatKc(r.zaplaceno)}</span><small>vložil${
-              r.osoba.rod === 'zena' ? 'a' : r.osoba.rod === 'muz' ? '' : 'o se'
-            } z podílu ${formatKc(r.skutecne)} — dluh se nesleduje</small></span>`
-          : '<span class="stav-kredit"><small>nesleduje se</small></span>';
+    // Kredit se ukazuje **u všech**, i u těch, od koho příspěvky nechodí na účet.
+    // Když někdo platí ze svého, jeho zůstatek dává smysl bez ohledu na to,
+    // jestli něco posílá příkazem — a dřív u něj svítilo jen „nesleduje se",
+    // takže nešlo poznat, jestli je v plusu, nebo v mínusu.
+    //
+    // Zůstává rozdíl v tom, jak se to čte: u nesledovaného není mínus dluh
+    // k vymáhání, jen zůstatek. Proto je tlumený a má to u sebe napsané.
+    const nevymaha = !r.sledovat && kredit < 0;
+    const trida = kredit > 0 ? 'plus' : nevymaha ? 'nevymaha' : kredit < 0 ? 'minus' : '';
+    const stav = `<span class="stav-kredit ${trida}" title="Za ${mesicu} ${
+      mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'
+    }: vloženo ${formatKc(r.zaplaceno)}, podíl na nákladech ${formatKc(r.skutecne)}">${formatKc(
+      Math.abs(kredit),
+    )}<small>${
+      kredit > 0 ? 'má k dobru' : kredit < 0 ? 'chybí' : 'vyrovnáno'
+    }${nevymaha ? ' · nevymáhá se' : ''}</small><small class="rozpis">z podílu ${formatKc(
+      r.skutecne,
+    )} vloženo ${formatKc(r.zaplaceno)}</small></span>`;
 
     return `<div class="osoba-radek">
       <span class="kdo">${esc(r.osoba.jmeno)}${
@@ -245,9 +265,12 @@ function grafKdoKolik(radky: RadekVyrovnani[], mesicu: number): string {
         <div class="pruh zaloha" title="Záloha na trvalý příkaz: ${formatKc(r.zaloha)}"><i style="width:${sirka(
           r.zaloha,
         )}%"></i></div>
+        <div class="pruh zesveho" title="Zaplaceno z vlastní kapsy: ${formatKc(
+          r.zeSveho,
+        )} měsíčně"><i style="width:${sirka(r.zeSveho)}%"></i></div>
         <span class="castky">měl by platit <b>${formatKc(r.mesicne)}</b> · posílá ${
           r.zaloha === 0 ? '—' : formatKc(r.zaloha)
-        }</span>
+        } · ze svého ${r.zeSveho === 0 ? '—' : `<b>${formatKc(r.zeSveho)}</b>`}</span>
       </div>
       ${stav}
     </div>`;
@@ -261,13 +284,17 @@ function grafKdoKolik(radky: RadekVyrovnani[], mesicu: number): string {
       <div class="legenda-pruhu">
         <span><i style="background: var(--accent); opacity: .85"></i> měsíční podíl na nákladech</span>
         <span><i style="background: var(--ok); opacity: .7"></i> záloha na trvalý příkaz</span>
+        <span><i style="background: var(--warn); opacity: .75"></i> zaplaceno z vlastní kapsy</span>
       </div>
       ${radky.map(radek).join('')}
       <p class="vysvetleni note">
+        Tři pruhy vedle sebe jsou <b>měsíční</b> čísla: co na člověka připadá, kolik na to posílá
+        zálohou a kolik za domácnost zaplatí přímo ze své kapsy.
         Vpravo je <b>kredit proti skutečnosti</b> — co člověk do domácnosti dal minus to,
         co na něj za sledované období připadlo. Kladné číslo znamená, že domácnost dluží jemu;
         počítá se do něj i nákup zaplacený z vlastní kapsy. U toho, od koho příspěvky nechodí
-        na účet, se dluh záměrně nesleduje, jen případný kredit.
+        na účet, je mínus vypsaný <b>tlumeně a s poznámkou „nevymáhá se"</b> — je to zůstatek,
+        ne dluh k doplacení.
       </p>
     </div>
   </section>`;

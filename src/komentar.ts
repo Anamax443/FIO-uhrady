@@ -161,6 +161,7 @@ export async function zhodnotVyvoj(
 
   return {
     backend: vysledek.backend,
+    zaskok: vysledek.zaskok,
     data: {
       shrnuti: shrnutiOk ? shrnuti : (body.shift() as string),
       body,

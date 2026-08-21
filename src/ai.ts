@@ -62,8 +62,13 @@ export function poradiBackendu(k: AiKontext): AiBackend[] {
  * Kontext z prostředí a nastavení. Jedno místo, ať health i výpočet
  * rozhodují stejně.
  */
-export function ctxAi(env: { AI?: Ai; ANTHROPIC_API_KEY?: string }, volba: string): AiKontext {
-  return { volba: volba ?? '', ai: env.AI, klic: env.ANTHROPIC_API_KEY };
+export function ctxAi(
+  env: { AI?: Ai; ANTHROPIC_API_KEY?: string },
+  volba: string,
+  /** klíč vložený v Nastavení; má přednost před secretem z prostředí */
+  klicZNastaveni: string | null = null,
+): AiKontext {
+  return { volba: volba ?? '', ai: env.AI, klic: klicZNastaveni ?? env.ANTHROPIC_API_KEY };
 }
 
 /** Lidský štítek do hlavičky a do logu — ať je poznat, čím se to počítalo. */
@@ -157,6 +162,14 @@ async function placene<T>(klic: string, system: string, user: string, maxTokens:
 export interface VysledekAi<T> {
   data: T;
   backend: AiBackend;
+  /**
+   * Proč nevyšel backend, který měl odpovědět jako první. Prázdné, když se
+   * povedlo napoprvé.
+   *
+   * Bez tohohle by vypršelý klíč ke Claude nikdo nepoznal: odpověď by tiše
+   * dorazila z free backendu a vypadala úplně stejně jako placená.
+   */
+  zaskok?: string;
 }
 
 /**
@@ -185,7 +198,9 @@ export async function zeptejSe<T>(
         backend === 'workers-ai'
           ? await zdarma<T>(k.ai as Ai, system, user, maxTokens)
           : await placene<T>(k.klic as string, system, user, maxTokens);
-      return { data, backend };
+      // Když se to povedlo až napodruhé, musí to být vidět — jinak vypadá
+      // odpověď ze záskoku stejně jako ta, o kterou si člověk řekl.
+      return potize.length > 0 ? { data, backend, zaskok: potize.join(' · ') } : { data, backend };
     } catch (err) {
       potize.push(`${popisBackendu(backend)}: ${err instanceof Error ? err.message : String(err)}`);
     }

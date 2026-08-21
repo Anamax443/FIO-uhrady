@@ -84,8 +84,10 @@ export function renderNastaveni(
   stav: string | null = null,
   /** je k dispozici free backend (binding na Workers AI)? */
   maAi = false,
-  /** je uložený klíč ke Claude? */
+  /** je čím platit Claude — klíč z Nastavení nebo secret z prostředí? */
   maKlicAi = false,
+  /** je klíč jen v prostředí (wrangler secret)? Pak ho odsud nejde přepsat. */
+  klicZProstredi = false,
 ): string {
   const jmeno = (id: number | null | undefined): string =>
     osoby.find((x) => x.id === id)?.jmeno ?? '';
@@ -163,6 +165,8 @@ export function renderNastaveni(
     token: 'Token do Fio uložen. Další stažení pohybů ho použije.',
     texty: 'Texty uloženy. QR i osobní přehled je od teď používají.',
     ai: 'Backend pro AI uložen.',
+    klic: 'Klíč ke Claude uložen. Placený backend ho použije, až si ho vybereš.',
+    'klic-smazan': 'Klíč ke Claude smazán. AI běží dál zdarma přes Workers AI.',
   };
   const hlaska = stav === null ? null : (HLASKY[stav] ?? null);
 
@@ -282,9 +286,16 @@ export function renderNastaveni(
           free backend úplně chyběl.
         </p>
         <p class="vysvetleni">
-          Modelu se posílají <b>jen náklady domu</b> — částky, kategorie a vývoj po měsících.
-          Žádná jména, žádná čísla účtů, žádné platby. A počítá se jen na kliknutí,
-          ne při každém načtení stránky.
+          Komentáři na Přehledu se posílají <b>jen náklady domu</b> — částky, kategorie a vývoj
+          po měsících, žádná jména. Okno <b>Zeptat se AI</b> na Nákladech domu dostane navíc
+          <b>rozpad na osoby a kredity včetně jmen</b>, protože bez nich se na dotaz odpovědět nedá.
+          Čísla účtů, variabilní symboly ani jednotlivé platby z banky se ven neposílají nikdy.
+          A počítá se jen na kliknutí, ne při každém načtení stránky.
+        </p>
+        <p class="vysvetleni">
+          <b>Bez AI aplikace nezůstane.</b> Když placený klíč vyprší nebo Claude neodpoví,
+          dotaz se dopočítá zdarma přes Workers AI a u odpovědi je vidět, že zaskočil
+          free backend a proč.
         </p>
         <div class="tokenradek">
           <label for="ai-provider">Backend</label>
@@ -298,6 +309,28 @@ export function renderNastaveni(
           <span class="note" id="ai-stav"></span>
         </div>
         <p class="vysvetleni note">${esc(popisVolby(nastaveni.ai_provider, maAi, maKlicAi))}</p>
+
+        <div class="tokenradek">
+          <span class="stav">Klíč ke Claude: <b class="mono">${
+            nastaveni.claude_klic_naznak
+              ? esc(nastaveni.claude_klic_naznak)
+              : klicZProstredi
+                ? 'jen v prostředí (wrangler secret)'
+                : 'zatím žádný'
+          }</b></span>
+        </div>
+        <div class="tokenradek">
+          <input type="password" id="claude-klic" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" />
+          <button class="btn primary" type="button" id="ulozit-klic" title="Uloží klíč od Anthropic. Uložený klíč se odsud už nedá přečíst, jen přepsat.">Uložit klíč</button>
+          <button class="btn" type="button" id="smazat-klic" title="Smaže klíč. AI tím nezmizí — poběží dál zdarma přes Workers AI.">Smazat klíč</button>
+          <span class="note" id="klic-stav"></span>
+        </div>
+        <p class="vysvetleni note">
+          Klíč se zakládá na <span class="mono">console.anthropic.com</span> → API keys. Ukládá se
+          stejně jako token do Fio: v aplikaci se už nedá přečíst, jen přepsat, a do historie změn
+          jde jen fakt, že se měnil — ne hodnota. Klíč vložený tady má přednost před
+          <span class="mono">ANTHROPIC_API_KEY</span> z prostředí.
+        </p>
       </div>
     </section>
 
@@ -440,6 +473,22 @@ el('ulozit-ai').addEventListener('click', async () => {
   const vysledek = await posli('/api/ai', { provider: el('ai-provider').value });
   if (vysledek.ok) { znovu('ai'); return; }
   el('ai-stav').textContent = vysledek.chyba;
+});
+
+el('ulozit-klic').addEventListener('click', async () => {
+  const pole = el('claude-klic');
+  el('klic-stav').textContent = 'ukládám…';
+  const vysledek = await posli('/api/claude-klic', { klic: pole.value });
+  if (vysledek.ok) { pole.value = ''; znovu('klic'); return; }
+  el('klic-stav').textContent = vysledek.chyba;
+});
+
+el('smazat-klic').addEventListener('click', async () => {
+  if (!confirm('Smazat klíč ke Claude? AI tím nevypneš — poběží dál zdarma přes Workers AI.')) return;
+  el('klic-stav').textContent = 'mažu…';
+  const vysledek = await posli('/api/claude-klic', { klic: '' });
+  if (vysledek.ok) { znovu('klic-smazan'); return; }
+  el('klic-stav').textContent = vysledek.chyba;
 });
 
 el('ulozit-token').addEventListener('click', async () => {

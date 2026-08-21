@@ -4,7 +4,7 @@
 > [HANDOFF.md](../HANDOFF.md); this document gets rewritten.
 > Czech original: [STAV.md](STAV.md).
 
-**As of 2026-08-21 · live `523711c` · <https://fio-uhrady.bass443.workers.dev>**
+**As of 2026-08-21 · live `ZIVY_HASH` · <https://fio-uhrady.bass443.workers.dev>**
 
 ## What it is for
 
@@ -28,14 +28,15 @@ fixed advances against reality.
 | Period settlement | ✅ | difference folded into the advance or left to pay; **automatic** once the period is complete |
 | Member's personal view | ✅ | `/v/{token}`, running balance, QR payment, wording from Settings |
 | Audit trail and change history | ✅ | no write without a record; its own page showing old → new values |
-| AI layer | ✅ | switchable backend (free Workers AI × Claude), commentary on cost trends |
+| AI layer | ✅ | switchable backend; the Claude key is entered in Settings, and the free backend stands in when the paid one fails |
+| Asking the AI | ✅ | a window on House costs; the app does the arithmetic, a sentence with a number not in the briefing is flagged ⚠ |
 | Sign-in | ✅ | PIN (PBKDF2 + lockout); Cloudflare Access takes precedence |
 
 ## What is not there yet
 
 | Missing | Why it is not blocking |
 |---|---|
-| **AI — reading receipts** | the layer and the trend commentary are done; only receipt OCR is left |
+| **AI — reading receipts** | the layer, the commentary and questions are done; only receipt OCR is left |
 | **E-mail (Resend)** | the settlement is shown in the app and on the personal link |
 | **CSV import** | export works; nobody has needed import yet |
 | **Cloudflare Access instead of the PIN** | the PIN works; Access is a planned swap |
@@ -44,7 +45,7 @@ fixed advances against reality.
 ## Numbers
 
 - **12 schema migrations** (`schema/0001` … `0012`), all applied to production
-- **15 modules** in `src/`, type check clean
+- **25 modules** in `src/`, type check clean
 - Deployment is **manual** (`npm run deploy`), no CI; cron runs every 15 minutes
 
 ## Traps everyone hits
@@ -60,7 +61,14 @@ fixed advances against reality.
    assemble their JavaScript as a string, so a name clash does not break one
    function — it breaks everything. Check by extracting `<script>` from the page
    and running `node --check`.
-4. **Fio's API also returns HTTP 500** during outages on their side. It is not a
+4. **`element.hidden = true` does not hide an element that has its own `display`
+   rule.** The rule wins over the browser's `[hidden]`, so a "hidden" banner stays
+   on screen with text that no longer applies. Every such class needs
+   `.class[hidden] { display: none }` next to it.
+5. **Workers AI cannot be exercised in local `wrangler dev`** ("Binding AI needs to
+   be run remotely"). For a test, temporarily set
+   `"ai": { "binding": "AI", "experimental_remote": true }` and put it back afterwards.
+6. **Fio's API also returns HTTP 500** during outages on their side. It is not a
    token problem; `periods/` fetches the whole window, so the next run catches up.
 
 ## What comes next

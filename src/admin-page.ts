@@ -180,15 +180,27 @@ export function vlozenoZeSveho(prehled: Prehled, odMesice: string, doMesice: str
 
 const STYL = `
 <style>
-.main { grid-template-columns: minmax(0, 1fr) 366px; }
-.list { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
-.detail { display: flex; flex-direction: column; min-width: 0; overflow-y: auto; background: var(--chrome-hi); }
-table { min-width: 760px; }
+/* Detail se otevírá až na vyžádání — dvojklikem na řádek, Enterem nebo
+   tlačítkem Upravit. Zavřený nezabírá místo a tabulka má celou šířku. */
+.main { grid-template-columns: minmax(0, 1fr); }
+body[data-detail="1"] .main { grid-template-columns: minmax(0, 1fr) 366px; }
+.list { display: flex; flex-direction: column; min-width: 0; }
+body[data-detail="1"] .list { border-right: 1px solid var(--border); }
+.detail { display: none; flex-direction: column; min-width: 0; overflow-y: auto; background: var(--chrome-hi); }
+body[data-detail="1"] .detail { display: flex; }
+.detail .panehead .zavrit { margin-left: auto; height: 20px; }
+table { min-width: 900px; }
 .osoba small { display: block; font-weight: 400; font-size: 10px; color: var(--text-faint); }
 .col-per { width: 108px; color: var(--text-dim); }
 .col-druh { width: 104px; color: var(--text-dim); }
 .col-stav { width: 116px; }
 .col-kat { width: 124px; color: var(--text-dim); }
+.col-hradi { width: 92px; color: var(--text-dim); }
+.col-zdroj { width: 132px; color: var(--text-dim); }
+/* Zaplaceno z vlastní kapsy = někomu z toho vzniká kredit, proto zelená;
+   účet domácnosti je běžný stav. */
+.zdroj.z-osoba .dot { background: var(--ok); }
+.zdroj.z-ucet .dot { background: var(--accent); }
 thead tr.radici th { cursor: pointer; user-select: none; white-space: nowrap; }
 thead tr.radici th:hover { background: var(--hover); }
 thead tr.radici th .sipka { display: inline-block; width: 10px; margin-left: 3px; color: var(--accent); }
@@ -212,6 +224,24 @@ thead tr.filtry input, thead tr.filtry select { width: 100%; min-width: 0; font-
 .druh.d-nedoplatek .dot { background: var(--crit); }
 .druh.d-preplatek .dot { background: var(--ok); }
 .prazdno { padding: 26px 18px; color: var(--text-dim); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* Okno na dotazy pro AI. Modální, ať je jasné, že se teď dělá jedna věc. */
+dialog.okno { width: min(700px, 94vw); max-height: 86vh; padding: 0; border: 1px solid var(--border); border-radius: 3px; background: var(--pane); color: var(--text); font: inherit; box-shadow: 0 18px 50px rgba(20, 30, 40, .3); }
+dialog.okno::backdrop { background: rgba(20, 30, 40, .34); }
+dialog.okno .telo { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.dotaz-zadani { display: flex; flex-direction: column; gap: 6px; }
+.dotaz-zadani textarea { width: 100%; min-height: 60px; resize: vertical; }
+.dotaz-lista { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dotaz-vlakno { display: flex; flex-direction: column; gap: 10px; max-height: 42vh; overflow-y: auto; }
+.dotaz-blok { display: flex; flex-direction: column; gap: 4px; padding-bottom: 9px; border-bottom: 1px solid var(--border-soft); }
+.dotaz-blok:last-child { border-bottom: 0; padding-bottom: 0; }
+.dotaz-blok .otazka { font-weight: 600; }
+.dotaz-blok .odpoved { display: flex; flex-direction: column; gap: 3px; color: var(--text-dim); }
+/* Věta s číslem, které v podkladu není. Nemaže se — vypadl by kus odpovědi —
+   ale musí být poznat, že se na to číslo spolehnout nedá. */
+.dotaz-blok .veta.nejiste { color: var(--warn); }
+.dotaz-blok .veta.nejiste::before { content: "⚠ "; }
+.dotaz-blok .zdroj-odpovedi { color: var(--text-faint); font-size: 11.5px; }
 
 .detail .body { padding: 9px 10px 12px; display: flex; flex-direction: column; gap: 9px; }
 .frow { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -254,7 +284,7 @@ thead tr.filtry input, thead tr.filtry select { width: 100%; min-width: 0; font-
 }
 @media (max-width: 560px) {
   table { min-width: 0; }
-  .col-druh, .col-per, .col-stav { width: auto; }
+  .col-druh, .col-per, .col-stav, .col-hradi, .col-zdroj { width: auto; }
   /* Nuly by kartu jen zaplevelily — kdo se nepodílí, prostě není vidět.
      Stejně tak „Druh: pravidelný" u každé položky; zůstanou jen výjimky. */
   tbody td.osoba-cell.zero, tbody td.col-druh.bezny { display: none; }
@@ -305,6 +335,10 @@ function grid(prehled: Prehled, s: Souhrn): string {
         r.jednorazovy && p.datum ? p.datum.split('-').reverse().join('. ') : popisPeriody(p.perioda);
 
       const kategorie = p.kategorie ?? '';
+      // Kdo fakturu fyzicky platí a odkud jdou peníze — dřív se to dalo zjistit
+      // jen otevřením detailu, takže se u třinácti položek nedalo porovnat.
+      const hradi = prehled.osoby.find((o) => o.id === p.hradi_member_id);
+      const zdrojOsoba = (p.zdroj_uhrady ?? 'ucet') === 'osoba';
 
       return `<tr data-id="${p.id}"${i === 0 ? ' data-selected="true"' : ''} tabindex="0"
     data-kat="${esc(kategorie)}" data-druh="${p.druh}" data-per="${p.perioda}"
@@ -315,6 +349,12 @@ function grid(prehled: Prehled, s: Souhrn): string {
     kategorie ? esc(kategorie) : '<span class="pozn">bez kategorie</span>'
   }</td>
   <td class="col-druh${p.druh === 'pravidelny' ? ' bezny' : ''}" data-popis="Druh" data-klic="druh"><span class="druh d-${p.druh}"><span class="dot"></span>${popisDruhu(p.druh)}</span></td>
+  <td class="col-hradi" data-popis="Fakturu platí" data-klic="hradi">${
+    hradi ? esc(hradi.jmeno) : '<span class="pozn">neurčeno</span>'
+  }</td>
+  <td class="col-zdroj" data-popis="Zaplaceno z" data-klic="zdroj"><span class="zdroj ${
+    zdrojOsoba ? 'z-osoba' : 'z-ucet'
+  }"><span class="dot"></span>${zdrojOsoba ? 'vlastní kapsa' : 'účet domácnosti'}</span></td>
   <td class="col-per" data-popis="Kdy" data-klic="per">${esc(kdy)}</td>
   <td class="col-num" data-popis="Za období" data-klic="obdobi" data-v="${p.castka_celkem}">${formatKc(p.castka_celkem)}</td>
   <td class="col-num${r.castka < 0 ? ' minus' : ''}" data-popis="Měsíčně" data-klic="mesicne" data-v="${r.castka}">${r.jednorazovy ? formatKcZnamenko(r.castka) : formatKc(r.castka)}</td>
@@ -336,10 +376,12 @@ function grid(prehled: Prehled, s: Souhrn): string {
 
   // Nabídky filtrů se berou z toho, co v tabulce opravdu je — vypsat pevný
   // seznam by znamenalo nabízet kategorie, které nikdo nepoužil.
+  // Prázdná hodnota jde do volby pod svým popiskem („bez kategorie"), ne jako
+  // prázdný string — ten filtr vyhodnocuje jako „vše" a volba pak nic nedělala.
   const volby = (hodnoty: string[], prazdne: string): string =>
-    [...new Set(hodnoty)]
+    [...new Set(hodnoty.map((h) => (h === '' ? prazdne : h)))]
       .sort((a, b) => a.localeCompare(b, 'cs'))
-      .map((h) => `<option value="${esc(h)}">${esc(h === '' ? prazdne : h)}</option>`)
+      .map((h) => `<option value="${esc(h)}">${esc(h)}</option>`)
       .join('');
 
   const filtrVolba = (klic: string, hodnoty: string[], prazdne: string, popis: string): string =>
@@ -358,6 +400,8 @@ function grid(prehled: Prehled, s: Souhrn): string {
         ${seradit('nazev', 'Položka')}
         ${seradit('kat', 'Kategorie', 'col-kat')}
         ${seradit('druh', 'Druh', 'col-druh')}
+        ${seradit('hradi', 'Fakturu platí', 'col-hradi')}
+        ${seradit('zdroj', 'Zaplaceno z', 'col-zdroj')}
         ${seradit('per', 'Perioda / datum', 'col-per')}
         ${seradit('obdobi', 'Za období', 'col-num')}
         ${seradit('mesicne', 'Měsíčně / jednorázově', 'col-num')}
@@ -368,6 +412,18 @@ function grid(prehled: Prehled, s: Souhrn): string {
         <th><input type="search" data-filtr="nazev" placeholder="hledat v názvu…" aria-label="Filtr: název" title="Filtrovat podle názvu a poznámky" /></th>
         <th>${filtrVolba('kat', prehled.polozky.map((p) => p.kategorie ?? ''), 'bez kategorie', 'kategorie')}</th>
         <th>${filtrVolba('druh', prehled.polozky.map((p) => popisDruhu(p.druh)), '', 'druhu')}</th>
+        <th>${filtrVolba(
+          'hradi',
+          prehled.polozky.map((p) => prehled.osoby.find((o) => o.id === p.hradi_member_id)?.jmeno ?? ''),
+          'neurčeno',
+          'toho, kdo platí fakturu',
+        )}</th>
+        <th>${filtrVolba(
+          'zdroj',
+          prehled.polozky.map((p) => ((p.zdroj_uhrady ?? 'ucet') === 'osoba' ? 'vlastní kapsa' : 'účet domácnosti')),
+          '',
+          'zdroje úhrady',
+        )}</th>
         <th>${filtrVolba('per', prehled.polozky.map((p) => popisPeriody(p.perioda)), '', 'periody')}</th>
         <th></th><th></th>
         ${prehled.osoby.map(() => '<th></th>').join('')}
@@ -383,13 +439,13 @@ function grid(prehled: Prehled, s: Souhrn): string {
     <tbody>${radky}</tbody>
     <tfoot>
       <tr>
-        <td>Pravidelné náklady měsíčně</td><td></td><td></td><td></td><td></td>
+        <td>Pravidelné náklady měsíčně</td><td></td><td></td><td></td><td></td><td></td><td></td>
         <td class="col-num" data-soucet="mesicne">${formatKc(s.mesicneCelkem)}</td>
         ${soucty(s.mesicneOsoba, false, 'mesicne')}
         <td></td>
       </tr>
       <tr>
-        <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td><td></td>
+        <td>Jednorázové <span class="pozn">(promítne se do vyrovnání)</span></td><td></td><td></td><td></td><td></td><td></td><td></td>
         <td class="col-num${s.saldoCelkem < 0 ? ' minus' : ''}" data-soucet="saldo">${formatKcZnamenko(s.saldoCelkem)}</td>
         ${soucty(s.saldoOsoba, true, 'saldo')}
         <td></td>
@@ -467,7 +523,9 @@ function detail(prehled: Prehled): string {
     .join('');
 
   return `<section class="detail">
-  <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg><span id="d-titulek">Detail položky</span></div>
+  <div class="panehead"><svg class="icon icon-sm"><use href="#i-doc"/></svg><span id="d-titulek">Detail položky</span>
+    <button class="tbtn zavrit" type="button" id="d-zavrit" title="Zavře panel s detailem (Esc). Neuložené změny se zahodí.">Zavřít</button>
+  </div>
   <div class="body">
     <div class="frow"><label for="d-nazev">Název</label><input type="text" id="d-nazev" maxlength="120" /></div>
     <div class="frow2">
@@ -531,6 +589,7 @@ export function renderNaklady(
   commit: string,
   vybrano: number | null = null,
   stav: string | null = null,
+  aiVypnuta = false,
 ): string {
   const s = spocitej(prehled);
 
@@ -582,20 +641,48 @@ export function renderNaklady(
         <span class="count" id="pocet">${prehled.polozky.length} položek</span>
       </div>
       <div class="toolbar">
-        <button class="tbtn primary" type="button" id="t-nova"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Přidat položku</button>
+        <button class="tbtn primary" type="button" id="t-nova" title="Otevře prázdný detail pro nový náklad"><svg class="icon icon-sm"><use href="#i-plus"/></svg>Přidat položku</button>
         <span class="sep"></span>
-        <button class="tbtn" type="button" id="t-duplikovat"><svg class="icon icon-sm"><use href="#i-copy"/></svg>Duplikovat</button>
-        <button class="tbtn" type="button" id="t-smazat"><svg class="icon icon-sm"><use href="#i-trash"/></svg>Smazat</button>
+        <button class="tbtn" type="button" id="t-upravit" title="Otevře detail označené položky — totéž udělá dvojklik na řádek nebo Enter"><svg class="icon icon-sm"><use href="#i-edit"/></svg>Upravit</button>
+        <button class="tbtn" type="button" id="t-duplikovat" title="Založí novou položku podle označené"><svg class="icon icon-sm"><use href="#i-copy"/></svg>Duplikovat</button>
+        <button class="tbtn" type="button" id="t-smazat" title="Smaže označenou položku; záznam zůstane v historii změn"><svg class="icon icon-sm"><use href="#i-trash"/></svg>Smazat</button>
         <span class="sep"></span>
-        <a class="tbtn" href="/admin/export.csv"><svg class="icon icon-sm"><use href="#i-export"/></svg>Export CSV</a>
+        <button class="tbtn" type="button" id="t-dotaz"${
+          aiVypnuta ? ' disabled title="AI je vypnutá v Nastavení"' : ' title="Otevře okno, kde se dá zeptat na cokoli k nákladům — AI jen čte, nic nemění"'
+        }><svg class="icon icon-sm"><use href="#i-ai"/></svg>Zeptat se AI</button>
+        <span class="sep"></span>
+        <a class="tbtn" href="/admin/export.csv" title="Stáhne všechny položky i s rozpadem na osoby jako CSV"><svg class="icon icon-sm"><use href="#i-export"/></svg>Export CSV</a>
       </div>
+      <div class="hlaska" id="stranka-hlaska" hidden></div>
       <div class="filtr-info" id="filtr-info" hidden>
         <span id="filtr-info-text"></span>
         <button class="tbtn" type="button" id="filtr-zrusit" title="Vrátí tabulku na všechny položky">Zrušit filtr</button>
       </div>
       ${grid(prehled, s)}
     </section>
-    ${detail(prehled)}`;
+    ${detail(prehled)}
+    <dialog class="okno" id="ai-okno" aria-labelledby="ai-nadpis">
+      <div class="panehead"><svg class="icon icon-sm"><use href="#i-ai"/></svg><span id="ai-nadpis">Zeptat se AI na náklady</span>
+        <button class="tbtn zavrit" type="button" id="ai-zavrit" style="margin-left:auto" title="Zavře okno (Esc)">Zavřít</button>
+      </div>
+      <div class="telo">
+        <div class="dotaz-zadani">
+          <label for="ai-otazka">Na co se chceš zeptat?</label>
+          <textarea id="ai-otazka" maxlength="500" placeholder="Třeba: Kolik měsíčně padne na energie? Proč je máma v mínusu? Která položka je největší?"></textarea>
+          <div class="dotaz-lista">
+            <button class="btn primary" type="button" id="ai-poslat" title="Odeslat dotaz (Ctrl+Enter)">Zeptat se</button>
+            <span class="note" id="ai-stav"></span>
+          </div>
+        </div>
+        <div class="dotaz-vlakno" id="ai-vlakno"></div>
+        <span class="note">
+          Modelu jdou <b>náklady domu, rozpad na osoby a kredity</b> — včetně jmen, protože bez nich
+          se na většinu otázek odpovědět nedá. <b>Nejdou</b> čísla účtů, variabilní symboly, jednotlivé
+          platby z banky ani e-maily. Všechna čísla počítá aplikace a model je dostává hotová;
+          věta s číslem, které v podkladu není, se označí ⚠. <b>AI jen čte — nic nemění.</b>
+        </span>
+      </div>
+    </dialog>`;
 
   const status = `
     <span>Pravidelné <b>${formatKc(s.mesicneCelkem)}</b>/měs</span>
@@ -620,11 +707,22 @@ const mesicuText = (n) => n + (n === 1 ? ' měsíc' : n < 5 ? ' měsíce' : ' m�
 
 let vybraneId = ${vybrano ?? prehled.polozky[0]?.id ?? 'null'};
 const STAV_PO_ULOZENI = ${JSON.stringify(stav)};
+// Otevřít detail rovnou po načtení dává smysl jen při návratu z uložení nebo
+// když si někdo stránku otevřel s konkrétní položkou (?vybrano=).
+const OTEVRIT_DETAIL = ${JSON.stringify(vybrano !== null)};
 
 function hlaska(text, typ) {
   const box = el('d-hlaska');
-  if (!text) { box.hidden = true; return; }
+  if (!text) { box.hidden = true; box.textContent = ''; return; }
   box.hidden = false;
+  box.className = 'hlaska ' + typ;
+  box.textContent = text;
+}
+
+/** Co se právě stalo s daty. Musí být vidět i tehdy, když je detail zavřený. */
+function hlaskaStranky(text, typ) {
+  const box = el('stranka-hlaska');
+  box.hidden = !text;
   box.className = 'hlaska ' + typ;
   box.textContent = text;
 }
@@ -778,15 +876,127 @@ el('d-ulozit').addEventListener('click', () => {
   });
 });
 
+/* Detail je panel na vyžádání: sám od sebe se neotevře, jen když o něj člověk
+   požádá. Označení řádku a otevření detailu jsou proto dvě různé věci. */
+function otevriDetail(id) {
+  document.body.dataset.detail = '1';
+  ukazPolozku(id);
+  if (window.matchMedia('(max-width: 860px)').matches) {
+    q('.detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+function zavriDetail() {
+  document.body.dataset.detail = '0';
+  const radek = document.querySelector('#grid tbody tr[data-selected="true"]');
+  if (radek) radek.focus();
+}
+const detailOtevreny = () => document.body.dataset.detail === '1';
+
+el('d-zavrit').addEventListener('click', zavriDetail);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !detailOtevreny()) return;
+  // Otevřené okno na dotazy si Esc bere pro sebe, jinak by jedno stisknutí
+  // zavřelo obojí najednou.
+  if (oknoAi.open) return;
+  // Uvnitř formuláře Esc nezavírá — rozepsaná změna by zmizela bez varování.
+  if (e.target.closest && e.target.closest('.detail')) return;
+  e.preventDefault();
+  zavriDetail();
+});
+
+/* ---------- okno na dotazy pro AI ---------- */
+
+const oknoAi = el('ai-okno');
+const tlacitkoDotaz = el('t-dotaz');
+
+if (!tlacitkoDotaz.disabled) {
+  tlacitkoDotaz.addEventListener('click', () => { oknoAi.showModal(); el('ai-otazka').focus(); });
+}
+el('ai-zavrit').addEventListener('click', () => oknoAi.close());
+el('ai-poslat').addEventListener('click', () => void zeptejSeAi());
+el('ai-otazka').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void zeptejSeAi(); }
+});
+
+/**
+ * Odpověď se skládá z uzlů přes textContent, ne přes innerHTML — text od modelu
+ * je cizí vstup a do stránky se nesmí dostat jako značky.
+ */
+function pridejDoVlakna(otazka, data) {
+  const blok = document.createElement('div');
+  blok.className = 'dotaz-blok';
+
+  const nadpis = document.createElement('span');
+  nadpis.className = 'otazka';
+  nadpis.textContent = otazka;
+  blok.appendChild(nadpis);
+
+  const odpoved = document.createElement('div');
+  odpoved.className = 'odpoved';
+  for (const v of data.vety || []) {
+    const veta = document.createElement('span');
+    veta.className = 'veta' + (v.overeno ? '' : ' nejiste');
+    veta.textContent = v.text;
+    if (!v.overeno) veta.title = 'Věta obsahuje číslo, které v podkladu není — neber ji jako fakt.';
+    odpoved.appendChild(veta);
+  }
+  blok.appendChild(odpoved);
+
+  const zdroj = document.createElement('span');
+  zdroj.className = 'zdroj-odpovedi';
+  const nejistych = (data.vety || []).filter((v) => !v.overeno).length;
+  zdroj.textContent =
+    'odpovědělo: ' + data.backend +
+    (nejistych > 0 ? ' · ' + nejistych + ' věta s neověřeným číslem je označená ⚠' : '');
+  blok.appendChild(zdroj);
+
+  // Placený backend selhal a odpověď došla zdarma. Bez tohohle by to vypadalo
+  // stejně jako odpověď od Clauda a vypršelý klíč by si nikdo nevšiml.
+  if (data.zaskok) {
+    const zaskok = document.createElement('span');
+    zaskok.className = 'zdroj-odpovedi';
+    zaskok.textContent = 'zaskočil free backend — ' + data.zaskok;
+    blok.appendChild(zaskok);
+  }
+
+  el('ai-vlakno').appendChild(blok);
+  blok.scrollIntoView({ block: 'nearest' });
+}
+
+async function zeptejSeAi() {
+  const otazka = el('ai-otazka').value.trim();
+  const stav = el('ai-stav');
+  if (otazka === '') { stav.textContent = 'Napiš, na co se chceš zeptat.'; return; }
+  el('ai-poslat').disabled = true;
+  stav.textContent = 'ptám se…';
+  try {
+    const odpoved = await fetch('/api/dotaz', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ otazka: otazka }),
+    });
+    const data = await odpoved.json();
+    if (!odpoved.ok) { stav.textContent = data.chyba || 'Dotaz se nepovedlo zpracovat.'; return; }
+    pridejDoVlakna(otazka, data);
+    el('ai-otazka').value = '';
+    stav.textContent = '';
+  } catch (e) {
+    stav.textContent = 'Server neodpověděl: ' + e.message;
+  } finally {
+    el('ai-poslat').disabled = false;
+  }
+}
+
 el('d-zpet').addEventListener('click', () => ukazPolozku(vybraneId));
 el('t-nova').addEventListener('click', () => {
   document.querySelectorAll('#grid tbody tr').forEach((x) => x.removeAttribute('data-selected'));
-  ukazPolozku(null);
+  otevriDetail(null);
   el('d-nazev').focus();
 });
+el('t-upravit').addEventListener('click', () => otevriDetail(vybraneId));
 el('t-duplikovat').addEventListener('click', () => {
   if (vybraneId === null) return;
-  ukazPolozku(vybraneId);
+  otevriDetail(vybraneId);
   vybraneId = null;
   el('d-titulek').textContent = 'Nová položka';
   el('d-nazev').value = el('d-nazev').value + ' (kopie)';
@@ -844,16 +1054,22 @@ el('d-rovnym').addEventListener('click', () => {
 });
 
 document.querySelectorAll('#grid tbody tr').forEach((tr) => {
-  const vyber = () => {
+  const oznac = () => {
     document.querySelectorAll('#grid tbody tr').forEach((x) => x.removeAttribute('data-selected'));
     tr.setAttribute('data-selected', 'true');
-    ukazPolozku(Number(tr.dataset.id));
-    if (window.matchMedia('(max-width: 860px)').matches) {
-      q('.detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    vybraneId = Number(tr.dataset.id);
   };
-  tr.addEventListener('click', vyber);
-  tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); vyber(); } });
+  // Jedním klikem se řádek jen označí. Když už ale detail otevřený je, musí
+  // do něj skočit i ten nově označený řádek — jinak by šlo uložit formulář
+  // jedné položky pod id druhé.
+  tr.addEventListener('click', () => {
+    oznac();
+    if (detailOtevreny()) otevriDetail(vybraneId);
+  });
+  tr.addEventListener('dblclick', () => { oznac(); otevriDetail(vybraneId); });
+  tr.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); oznac(); otevriDetail(vybraneId); }
+  });
 });
 
 q('.detail').addEventListener('input', prepocitej);
@@ -883,7 +1099,7 @@ function projdeFiltrem(tr) {
     const je = klic === 'stav' ? tr.dataset.stav : String(hodnota(tr, klic));
     const shoda =
       pole.tagName === 'SELECT'
-        ? je.trim() === chtene || (chtene === 'bez kategorie' && je.trim() === 'bez kategorie')
+        ? je.trim() === chtene
         : je.toLowerCase().includes(chtene.toLowerCase());
     if (!shoda) return false;
   }
@@ -1010,15 +1226,15 @@ if (vybraneId !== null) {
   }
 }
 
-if (STAV_PO_ULOZENI === 'ulozeno') {
-  hlaska('Uloženo v ' + new Date().toLocaleTimeString('cs-CZ') + '. Změna je zapsaná v historii níž.', 'ok');
-} else if (STAV_PO_ULOZENI === 'bezezmen') {
-  hlaska('Nic se nezměnilo, takže se nic neukládalo — v historii nepřibyl záznam.', 'ok');
-} else if (STAV_PO_ULOZENI === 'smazano') {
-  hlaska('Položka smazána.', 'ok');
-}
+if (OTEVRIT_DETAIL) otevriDetail(vybraneId);
 
-ukazPolozku(vybraneId);
+if (STAV_PO_ULOZENI === 'ulozeno') {
+  hlaskaStranky('Uloženo v ' + new Date().toLocaleTimeString('cs-CZ') + '. Změna je zapsaná v historii změn.', 'ok');
+} else if (STAV_PO_ULOZENI === 'bezezmen') {
+  hlaskaStranky('Nic se nezměnilo, takže se nic neukládalo — v historii nepřibyl záznam.', 'ok');
+} else if (STAV_PO_ULOZENI === 'smazano') {
+  hlaskaStranky('Položka smazána. Záznam o ní zůstal v historii změn.', 'ok');
+}
 </script>`;
 
   return shell({
