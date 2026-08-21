@@ -27,6 +27,11 @@
     }
   ],
 
+  // Workers AI — free backend pro komentář k vývoji nákladů a čtení účtenek.
+  // Data neopustí Cloudflare a free tarif dá 10 000 neuronů denně. Placený Claude
+  // je volitelný přes ANTHROPIC_API_KEY; bez klíče appka sama nikdy neutrácí.
+  "ai": { "binding": "AI" },
+
   // Stahování pohybů z Fio: limit Fio API je 1 dotaz / 30 s, 15 minut je s rezervou.
   // Slot se uvolnil vypnutím cronů u nepoužívaného rezervace-app (2026-08-19);
   // účet bass443 má free limit 5 cron triggerů, další by skončil na chybě 10072.

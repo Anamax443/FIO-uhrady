@@ -4,3 +4,8 @@ FIO_TOKEN=
 
 # Jen pro lokální vývoj: pustí do /admin bez Cloudflare Access (platí pouze na localhostu).
 DEV_ADMIN=1
+
+# Volitelné: placený backend pro AI. Bez klíče jede jen free Cloudflare Workers AI
+# a aplikace sama od sebe nikdy neutrácí. V produkci jako secret:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+ANTHROPIC_API_KEY=

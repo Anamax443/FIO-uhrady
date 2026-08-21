@@ -35,6 +35,10 @@ export interface Nastaveni {
   qr_zprava: string;
   /** věty na osobním přehledu, které si správce píše sám (viz texty.ts) */
   texty: Record<string, string>;
+  /** '' | 'workers-ai' | 'anthropic' | 'off' — který AI backend se použije */
+  ai_provider: string;
+  /** poslední komentář k vývoji nákladů (JSON, viz komentar.ts); null = ještě nebyl */
+  ai_komentar: string | null;
 }
 
 interface ReadekPolozky {
@@ -709,6 +713,9 @@ export async function nactiNastaveni(db: D1Database): Promise<Nastaveni> {
     qr_prijemce: mapa.get('qr_prijemce') ?? '',
     qr_zprava: mapa.get('qr_zprava') ?? '',
     texty: slozTexty(mapa),
+    // Prázdné = auto, tedy zdarma. Appka sama nikdy neutrácí.
+    ai_provider: mapa.get('ai_provider') ?? '',
+    ai_komentar: mapa.get('ai_komentar') ?? null,
   };
 }
 

@@ -8,7 +8,9 @@
  * Rozvržení cest viz README.md, pravidla párování viz docs/ARCHITECTURE.md.
  */
 import { renderNaklady } from './admin-page.js';
+import { AI_VOLBY, ctxAi, popisBackendu } from './ai.js';
 import { dobehniAutomatiku, kdyZavreMesic } from './automat.js';
+import { podkladKomentare, zhodnotVyvoj } from './komentar.js';
 import {
   kdoZeCookie,
   maPin,
@@ -392,6 +394,8 @@ export default {
               env.GIT_COMMIT ?? 'dev',
               url.origin,
               url.searchParams.get('stav'),
+              Boolean(env.AI),
+              Boolean(env.ANTHROPIC_API_KEY),
             ),
           );
         }
@@ -749,6 +753,43 @@ export default {
             );
           }
           return json({ ok: true });
+        }
+
+        if (request.method === 'POST' && path === '/api/ai') {
+          const d = (await telo(request)) as { provider?: string };
+          const volba = String(d.provider ?? '').trim().toLowerCase();
+          if (!(AI_VOLBY as readonly string[]).includes(volba)) {
+            throw new ChybaVstupu('Neznámá volba backendu.');
+          }
+          await ulozNastaveni(
+            env.DB,
+            'ai_provider',
+            volba,
+            kdo,
+            `AI backend: ${volba === '' ? 'automaticky (zdarma)' : volba}`,
+          );
+          return json({ ok: true });
+        }
+
+        if (request.method === 'POST' && path === '/api/komentar') {
+          const s = await stavVyrovnani(env.DB);
+          // Modelu jdou jen náklady domu — žádná jména, žádná čísla účtů.
+          const podklad = podkladKomentare(s.prehled, s.uzaverky);
+          const vysledek = await zhodnotVyvoj(ctxAi(env, s.nastaveni.ai_provider), podklad);
+          const ulozit = JSON.stringify({
+            shrnuti: vysledek.data.shrnuti,
+            body: vysledek.data.body,
+            kdy: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            backend: popisBackendu(vysledek.backend),
+          });
+          await ulozNastaveni(
+            env.DB,
+            'ai_komentar',
+            ulozit,
+            kdo,
+            `Spočítán komentář k vývoji nákladů (${popisBackendu(vysledek.backend)})`,
+          );
+          return json({ ok: true, backend: vysledek.backend });
         }
 
         if (request.method === 'GET' && path === '/admin/export.csv') {

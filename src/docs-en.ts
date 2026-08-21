@@ -305,6 +305,40 @@ export const CHAPTERS: KapitolaEn[] = [
       </div>`,
   },
   {
+    id: 'ai',
+    nadpis: 'Artificial intelligence',
+    telo: `
+      <p>
+        On the Overview the application can write a <b>short commentary on how costs are
+        developing</b>. It never runs by itself — you start it with a button, so you always
+        know when it happened.
+      </p>
+      <h3>What leaves the application</h3>
+      <p>
+        The model receives <b>house costs only</b>: amounts, categories, the largest items
+        and the trend across closed months. <b>No names, no account numbers, no payments.</b>
+      </p>
+      <h3>Which backend</h3>
+      <ul>
+        <li><b>Automatic (default)</b> — free, via Cloudflare Workers AI. The data never
+            leaves Cloudflare and the application never spends money on its own.</li>
+        <li><b>Free only</b> — a paid call can never happen.</li>
+        <li><b>Paid Claude</b> — more accurate; used only if you pick it and a key is stored.</li>
+        <li><b>Off</b> — nothing is sent anywhere.</li>
+      </ul>
+      <h3>Why the model does not do the arithmetic</h3>
+      <p>
+        Every sum and percentage is calculated by the application and handed to the model
+        ready-made — a small model gets arithmetic wrong. On top of that there is a hard
+        guard: <b>a sentence containing a number that does not appear in the source data is
+        not published</b>. A shorter commentary beats plausible-sounding nonsense.
+      </p>
+      <div class="varovani">
+        The commentary is a summary, not a calculation. The figures in the tables are what
+        counts — which is why the text always states when it was produced and by which backend.
+      </div>`,
+  },
+  {
     id: 'export',
     nadpis: 'Exporting data',
     telo: `

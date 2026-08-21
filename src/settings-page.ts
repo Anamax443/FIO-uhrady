@@ -7,6 +7,7 @@
  */
 import type { Nastaveni } from './db.js';
 import type { Osoba } from './model.js';
+import { popisVolby } from './ai.js';
 import { TEXTY } from './texty.js';
 import { esc, shell } from './ui.js';
 
@@ -81,6 +82,10 @@ export function renderNastaveni(
    * stalo — člověk pak klikne podruhé.
    */
   stav: string | null = null,
+  /** je k dispozici free backend (binding na Workers AI)? */
+  maAi = false,
+  /** je uložený klíč ke Claude? */
+  maKlicAi = false,
 ): string {
   const jmeno = (id: number | null | undefined): string =>
     osoby.find((x) => x.id === id)?.jmeno ?? '';
@@ -157,6 +162,7 @@ export function renderNastaveni(
     sledovani: 'Sledování příspěvků uloženo.',
     token: 'Token do Fio uložen. Další stažení pohybů ho použije.',
     texty: 'Texty uloženy. QR i osobní přehled je od teď používají.',
+    ai: 'Backend pro AI uložen.',
   };
   const hlaska = stav === null ? null : (HLASKY[stav] ?? null);
 
@@ -263,6 +269,35 @@ export function renderNastaveni(
         <p class="vysvetleni note">
           Když pole u věty vyprázdníš, vrátí se výchozí znění uvedené pod ním.
         </p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panehead"><svg class="icon icon-sm"><use href="#i-info"/></svg>Umělá inteligence</div>
+      <div class="telo">
+        <p class="vysvetleni">
+          AI komentuje vývoj nákladů na Přehledu. <b>Výchozí backend je zdarma</b> —
+          Cloudflare Workers AI, data neopustí Cloudflare. Placený Claude je volitelný
+          a appka ho sama od sebe nepoužije; jen když si ho tady vybereš, nebo když by
+          free backend úplně chyběl.
+        </p>
+        <p class="vysvetleni">
+          Modelu se posílají <b>jen náklady domu</b> — částky, kategorie a vývoj po měsících.
+          Žádná jména, žádná čísla účtů, žádné platby. A počítá se jen na kliknutí,
+          ne při každém načtení stránky.
+        </p>
+        <div class="tokenradek">
+          <label for="ai-provider">Backend</label>
+          <select id="ai-provider">
+            <option value=""${nastaveni.ai_provider === '' ? ' selected' : ''}>automaticky (zdarma)</option>
+            <option value="workers-ai"${nastaveni.ai_provider === 'workers-ai' ? ' selected' : ''}>jen zdarma — Workers AI</option>
+            <option value="anthropic"${nastaveni.ai_provider === 'anthropic' ? ' selected' : ''}>placený Claude</option>
+            <option value="off"${nastaveni.ai_provider === 'off' ? ' selected' : ''}>vypnuto</option>
+          </select>
+          <button class="btn primary" type="button" id="ulozit-ai" title="Uloží volbu backendu">Uložit</button>
+          <span class="note" id="ai-stav"></span>
+        </div>
+        <p class="vysvetleni note">${esc(popisVolby(nastaveni.ai_provider, maAi, maKlicAi))}</p>
       </div>
     </section>
 
@@ -398,6 +433,13 @@ el('ulozit-texty').addEventListener('click', async () => {
   });
   if (vysledek.ok) { znovu('texty'); return; }
   el('texty-stav').textContent = vysledek.chyba;
+});
+
+el('ulozit-ai').addEventListener('click', async () => {
+  el('ai-stav').textContent = 'ukládám…';
+  const vysledek = await posli('/api/ai', { provider: el('ai-provider').value });
+  if (vysledek.ok) { znovu('ai'); return; }
+  el('ai-stav').textContent = vysledek.chyba;
 });
 
 el('ulozit-token').addEventListener('click', async () => {

@@ -6,6 +6,7 @@ import { spocitej } from './admin-page.js';
 import { zalohaVMesici, type Beh, type Nastaveni, type Uzaverka, type Zaloha } from './db.js';
 import { formatKc, formatKcZnamenko, mesicNyni, nahoruNaStovky, posunMesic } from './money.js';
 import { dleRodu, type Osoba, type Prehled } from './model.js';
+import { precistKomentar } from './komentar.js';
 import { esc, shell } from './ui.js';
 
 /* ---------- společné výpočty ---------- */
@@ -172,7 +173,49 @@ const STYL_PREHLED = `
 .blok { border-bottom: 1px solid var(--border); }
 .odkazy { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
 .odkazy a { text-decoration: none; }
+.ai { border-bottom: 1px solid var(--border); }
+.ai .telo-ai { padding: 10px 12px 13px; display: flex; flex-direction: column; gap: 7px; max-width: 82ch; }
+.ai .shrnuti { font-size: 14px; font-weight: 600; }
+.ai ul { margin: 0; padding-left: 19px; display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); }
+.ai .radek-ai { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 </style>`;
+
+/**
+ * Komentář k vývoji nákladů od AI. Nepočítá se při každém načtení stránky —
+ * spustí ho člověk tlačítkem. Je vidět, kdy vznikl a čím byl spočítaný,
+ * aby nikdo nečetl půl roku staré shrnutí jako dnešní.
+ */
+function blokKomentare(nastaveni: Nastaveni): string {
+  const k = precistKomentar(nastaveni.ai_komentar);
+  const vypnuta = (nastaveni.ai_provider ?? '').trim().toLowerCase() === 'off';
+
+  const obsah =
+    k === null
+      ? `<p class="vysvetleni">${
+          vypnuta
+            ? 'AI je vypnutá v Nastavení. Zapni ji, jestli chceš komentář k vývoji nákladů.'
+            : 'Zatím nespočítáno. Tlačítkem se pošlou <b>jen náklady domu</b> — žádná jména ani čísla účtů.'
+        }</p>`
+      : `<div class="shrnuti">${esc(k.shrnuti)}</div>
+         ${k.body.length ? `<ul>${k.body.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
+         <span class="note">
+           Spočítáno ${esc(k.kdy)} · ${esc(k.backend)} — text psal jazykový model
+           z čísel v tabulkách výše. Je to shrnutí, ne výpočet; závazná jsou čísla v appce.
+         </span>`;
+
+  return `<section class="ai blok">
+    <div class="panehead"><svg class="icon icon-sm"><use href="#i-info"/></svg>Komentář k vývoji nákladů</div>
+    <div class="telo-ai">
+      ${obsah}
+      <div class="radek-ai">
+        <button class="btn" type="button" id="ai-spustit"${vypnuta ? ' disabled title="AI je vypnutá v Nastavení"' : ' title="Pošle náklady domu modelu a vyžádá si krátké shrnutí"'}>
+          ${k === null ? 'Zhodnotit vývoj' : 'Přepočítat'}
+        </button>
+        <span class="note" id="ai-stav"></span>
+      </div>
+    </div>
+  </section>`;
+}
 
 export function renderPrehled(
   prehled: Prehled,
@@ -240,6 +283,8 @@ export function renderPrehled(
       </div>
     </section>
 
+    ${blokKomentare(nastaveni)}
+
     <div class="odkazy">
       <a class="btn" href="/admin">Náklady domu</a>
       <a class="btn" href="/admin/uhrady">Úhrady z Fio</a>
@@ -254,6 +299,24 @@ export function renderPrehled(
     commit,
     obsah,
     status: `<span>osob <b>${radky.length}</b></span><span>položek <b>${prehled.polozky.length}</b></span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    skript: `<script>
+const tlacitkoAi = document.getElementById('ai-spustit');
+if (tlacitkoAi) tlacitkoAi.addEventListener('click', async () => {
+  const stav = document.getElementById('ai-stav');
+  tlacitkoAi.disabled = true;
+  // Free model odpovídá v jednotkách sekund; bez téhle věty to vypadá zaseknutě.
+  stav.textContent = 'počítám… (pár sekund)';
+  try {
+    const odpoved = await fetch('/api/komentar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const data = await odpoved.json().catch(() => ({}));
+    if (odpoved.ok) { location.reload(); return; }
+    stav.textContent = data.chyba || 'Nepovedlo se spočítat.';
+  } catch (e) {
+    stav.textContent = 'Server neodpověděl: ' + e.message;
+  }
+  tlacitkoAi.disabled = false;
+});
+</script>`,
   });
 }
 

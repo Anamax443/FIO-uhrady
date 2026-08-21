@@ -355,6 +355,39 @@ const KAPITOLY: Kapitola[] = [
       </div>`,
   },
   {
+    id: 'ai',
+    nadpis: 'Umělá inteligence',
+    telo: `
+      <p>
+        Na Přehledu umí aplikace napsat <b>krátký komentář k vývoji nákladů</b>. Nepočítá
+        se sám — spustíš ho tlačítkem, takže víš přesně, kdy se to dělo.
+      </p>
+      <h3>Co se posílá ven</h3>
+      <p>
+        Modelu jdou <b>jen náklady domu</b>: částky, kategorie, největší položky a vývoj
+        po uzavřených měsících. <b>Žádná jména, žádná čísla účtů, žádné platby.</b>
+      </p>
+      <h3>Který backend</h3>
+      <ul>
+        <li><b>Automaticky (výchozí)</b> — zdarma přes Cloudflare Workers AI. Data neopustí
+            Cloudflare a aplikace sama od sebe nikdy neutrácí.</li>
+        <li><b>Jen zdarma</b> — placené volání nikdy nenastane.</li>
+        <li><b>Placený Claude</b> — přesnější; použije se, jen když si ho vybereš a je uložený klíč.</li>
+        <li><b>Vypnuto</b> — nikam se nic neposílá.</li>
+      </ul>
+      <h3>Proč se čísla nepočítají v modelu</h3>
+      <p>
+        Všechny součty a procenta si spočítá aplikace a modelu je předá hotová — malý model
+        se v aritmetice plete. Navíc platí tvrdá pojistka: <b>věta, ve které je číslo
+        nevyskytující se v podkladu, se nepublikuje</b>. Radši kratší komentář než hezky
+        znějící nesmysl.
+      </p>
+      <div class="varovani">
+        Komentář je shrnutí, ne výpočet. Závazná jsou čísla v tabulkách — u textu je proto
+        vždycky napsané, kdy vznikl a čím byl spočítaný.
+      </div>`,
+  },
+  {
     id: 'export',
     nadpis: 'Export dat',
     telo: `
