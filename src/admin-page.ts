@@ -231,7 +231,10 @@ thead tr.filtry input, thead tr.filtry select { width: 100%; min-width: 0; font-
 .zbytek.warn { color: var(--warn); }
 .dopad { color: var(--text-dim); }
 .dopad b { color: var(--text); }
-.detail .foot { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-top: 1px solid var(--border); background: var(--chrome); position: sticky; bottom: 0; flex-wrap: wrap; }
+/* Uložit musí být vidět pořád, i když se člověk zavrtá do historie —
+   proto je lišta přilepená ke spodku panelu a historie se posouvá pod ní. */
+.detail .foot { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--chrome); position: sticky; bottom: 0; z-index: 2; flex-wrap: wrap; box-shadow: 0 -4px 10px rgba(20, 30, 40, .07); }
+.detail .historie-blok { padding: 9px 10px 14px; display: flex; flex-direction: column; gap: 7px; }
 .detail .hlaska { margin: 0; border-bottom: 0; border-top: 1px solid var(--border); }
 .historie { display: flex; flex-direction: column; gap: 7px; }
 .zaznam { display: flex; flex-direction: column; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--border-soft); }
@@ -482,8 +485,8 @@ function detail(prehled: Prehled): string {
     <div class="frow2">
       <div class="frow"><label for="d-zdroj">Zaplaceno z</label>
         <select id="d-zdroj">
-          <option value="ucet">účtu domácnosti</option>
           <option value="osoba">vlastní kapsy (vzniká kredit)</option>
+          <option value="ucet">účtu domácnosti</option>
         </select>
       </div>
       <div class="frow"><label for="d-rozpustit">Rozpustit přes</label>
@@ -507,14 +510,16 @@ function detail(prehled: Prehled): string {
     <div class="dopad" id="d-dopad"></div>
     <span class="note">Odškrtnutá osoba se na položce nepodílí. Kdo má pevnou částku, tomu ji „Zbytek rovným dílem" nechá a rozdělí jen to, co zbývá. Nerozdělený zbytek se nikam neschová — zůstane vidět tady i v seznamu.</span>
 
-    <div class="subhead">Historie změn</div>
-    <div class="historie" id="d-historie"><span class="note">—</span></div>
   </div>
   <div class="hlaska" id="d-hlaska" hidden></div>
   <div class="foot">
     <button class="btn primary" type="button" id="d-ulozit">Uložit</button>
     <button class="btn" type="button" id="d-zpet">Zahodit změny</button>
     <span class="note" id="d-stav"></span>
+  </div>
+  <div class="historie-blok">
+    <div class="subhead">Historie změn</div>
+    <div class="historie" id="d-historie"><span class="note">—</span></div>
   </div>
 </section>`;
 }
@@ -610,6 +615,8 @@ const q = (sel) => document.querySelector(sel);
 const DELITEL = { mesicne: 1, ctvrtletne: 3, pololetne: 6, rocne: 12, jednorazove: 0 };
 const jednorazovy = (druh) => druh !== 'pravidelny';
 const cislo = (text) => parseFloat(String(text).replace(/\\s/g, '').replace(',', '.'));
+// „6 měsíců“ místo holé šestky — popisek pod částkou má jít přečíst jako věta.
+const mesicuText = (n) => n + (n === 1 ? ' měsíc' : n < 5 ? ' měsíce' : ' měsíců');
 
 let vybraneId = ${vybrano ?? prehled.polozky[0]?.id ?? 'null'};
 const STAV_PO_ULOZENI = ${JSON.stringify(stav)};
@@ -665,7 +672,11 @@ function prepocitej() {
     ? '<span>Rozpouští se měsíčně</span><b>' + kc(Math.round(celkem / rozpustitN)) + '</b>'
     : jedno
       ? '<span>Promítne se do vyrovnání</span><b>' + kcZn(zn * celkem) + '</b>'
-      : '<span>Měsíčně z toho</span><b>' + kc(del ? Math.round(celkem / del) : 0) + '</b>';
+      // Samotné „Měsíčně z toho: 967 Kč“ se u pololetní položky čte jako
+      // pololetní částka. Musí být vidět, z čeho vznikla a čím se dělí.
+      : '<span>' + (del > 1
+          ? 'Měsíční podíl z ' + kc(celkem) + ' ÷ ' + mesicuText(del)
+          : 'Měsíčně') + '</span><b>' + kc(del ? Math.round(celkem / del) : 0) + '</b>';
 
   return { celkem: celkem, podily: podily };
 }
@@ -674,7 +685,7 @@ function ukazPolozku(id) {
   const p = MODEL.polozky.find((x) => x.id === id) || {
     id: null, nazev: '', kategorie: '', castka: 0, perioda: 'mesicne',
     druh: 'pravidelny', datum: '', hradi: null, poznamka: '', podily: [],
-    rozpustit_od: '', rozpustit_mesicu: '', zdroj: 'ucet',
+    rozpustit_od: '', rozpustit_mesicu: '', zdroj: 'osoba',
   };
   vybraneId = p.id;
   el('d-titulek').textContent = p.id === null ? 'Nová položka' : p.nazev;
