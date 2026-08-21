@@ -2,6 +2,38 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — „967 Kč pololetně" nebylo pololetně
+
+Uživatel se ptal, odkud se u stočného bere 967 Kč, když faktura je 5 800 Kč
+pololetně. **Počítalo se správně** (5 800 ÷ 6 = 967, jeho 20 % = 193 Kč měsíčně,
+tedy 1 160 Kč za pololetí) — chyba byla v tom, jak to stránka napsala: ve sloupci
+měsíční částka a hned pod ní „pololetně". Vysvětlivka „Částky jsou měsíční" byla
+až na konci seznamu, kde si ji s konkrétním řádkem nikdo nespojí.
+
+Na osobním přehledu je teď u položky vidět, **odkud se měsíční částka vzala**:
+`pololetně 5 800 Kč → měsíčně`, u rozpouštěného nákupu `nákup 42 000 Kč
+rozpuštěný na 12 měsíců`. Částky mají jednotku `/měs` a nadpis sekce říká
+„Z čeho se to skládá — měsíčně".
+
+**Poučení:** přepočtená částka bez uvedení, z čeho vznikla, je horší než žádná —
+čte se jako údaj z faktury a člověk pak hledá chybu ve výpočtu, který je v pořádku.
+
+### Otevřené: stočné se platí ze svého
+
+Při té příležitosti vyšlo najevo, že **stočné platí děda ze svého**, ale položka
+má `zdroj_uhrady = 'ucet'`. Appka mu tedy 967 Kč měsíčně nikde nepřipisuje jako
+vklad, i když jeho podíl je jen 387 Kč (40 %) — rozdíl **580 Kč měsíčně**,
+za pololetí 3 480 Kč, mu ve vyúčtování chybí jako pohledávka.
+
+Změna je na uživateli: Náklady domu → Stočné → *Zaplaceno z* → **vlastní kapsy**.
+**Schválně to nedělám přes SQL** — obešlo by to auditní stopu a v historii položky
+by změna chyběla, což je jediné pravidlo appky, které nechci porušit ani se
+svolením zapisovat do ostré databáze.
+
+Rozdělení 40 / 20 / 20 / 20 je záměr (stočné je za 5 osob, pátá není v evidenci
+a nese ji děda) a je správně: 20 % = ⅕, dědových 40 % = ⅖. **Do poznámky u položky
+se to psát nemá** — výslovné přání uživatele.
+
 ## 2026-08-21 — dokumentace srovnaná, česky i anglicky
 
 Dokumentace narostla nesourodě, tak je celá přepsaná a **zdvojená do angličtiny**.
