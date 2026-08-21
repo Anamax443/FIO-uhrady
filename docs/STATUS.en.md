@@ -4,7 +4,7 @@
 > [HANDOFF.md](../HANDOFF.md); this document gets rewritten.
 > Czech original: [STAV.md](STAV.md).
 
-**As of 2026-08-21 · live `7a24cc2` · <https://fio-uhrady.bass443.workers.dev>**
+**As of 2026-08-21 · live `4207e8d` · <https://fio-uhrady.bass443.workers.dev>**
 
 ## What it is for
 

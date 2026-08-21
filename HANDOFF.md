@@ -2,6 +2,28 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — detail položky: čím se dělí a kde je Uložit
+
+Pokračování dotazu na stočné. Popisek **„Měsíčně z toho: 967 Kč"** byl v detailu
+položky stejně zavádějící jako na osobním přehledu — u pololetní položky se čte
+jako pololetní částka. Je teď **dynamický podle periody**:
+
+| Perioda | Popisek | Částka |
+|---|---|---|
+| měsíčně | Měsíčně | 1 500 Kč |
+| čtvrtletně | Měsíční podíl z 1 821 Kč ÷ 3 měsíce | 607 Kč |
+| pololetně | Měsíční podíl z 5 800 Kč ÷ 6 měsíců | 967 Kč |
+| ročně | Měsíční podíl z 2 400 Kč ÷ 12 měsíců | 200 Kč |
+
+**Uložit bylo až pod historií změn.** U položky s dlouhou historií se k němu
+muselo scrollovat a na běžné obrazovce nebylo vidět vůbec. Lišta s tlačítky je
+teď přilepená ke spodku panelu (`position: sticky; bottom: 0`) a **historie se
+posouvá pod ní** — přesně jak si uživatel přál.
+
+**Nová položka má výchozí „zaplaceno z vlastní kapsy"** (dřív účet domácnosti).
+Tak se většina nákupů platí a účet domácnosti je ta výjimka; volba je i první
+v seznamu. Existující položky se nemění.
+
 ## 2026-08-21 — „967 Kč pololetně" nebylo pololetně
 
 Uživatel se ptal, odkud se u stočného bere 967 Kč, když faktura je 5 800 Kč
