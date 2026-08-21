@@ -262,13 +262,23 @@ export function renderClen(
     .sort((a, b) => b.castka - a.castka)
     .map((r) => {
       const muj = mujPodilRadku(r);
+      // Ve sloupci je vždycky **měsíční** částka. U položky, která se platí
+      // jinak než měsíčně, se proto musí ukázat i faktura a přepočet —
+      // jinak se „967 Kč / pololetně" přečte jako pololetní částka.
+      const mesicu = r.polozka.rozpustit_mesicu ?? 0;
+      const zdroj =
+        mesicu > 0
+          ? `nákup ${formatKc(r.polozka.castka_celkem)} rozpuštěný na ${mesicu} měsíců`
+          : r.polozka.perioda !== 'mesicne'
+            ? `${esc(popisPeriody(r.polozka.perioda))} ${formatKc(r.polozka.castka_celkem)} → měsíčně`
+            : 'měsíčně';
       return `<div class="polozka">
       <span class="nazev">${esc(r.polozka.nazev)}</span>
-      <span class="cislo">${formatKc(r.castka)}</span>
-      <small>${esc(popisPeriody(r.polozka.perioda))}${
-        r.polozka.poznamka ? ` · ${esc(r.polozka.poznamka)}` : ''
+      <span class="cislo">${formatKc(r.castka)}<small class="jednotka"> /měs</small></span>
+      <small>${zdroj}${r.polozka.poznamka ? ` · ${esc(r.polozka.poznamka)}` : ''}</small>
+      <small class="cislo ${muj > 0 ? 'moje' : ''}">${
+        muj > 0 ? `z toho já ${formatKc(muj)} /měs` : 'nepodílím se'
       }</small>
-      <small class="cislo ${muj > 0 ? 'moje' : ''}">${muj > 0 ? `z toho já ${formatKc(muj)}` : 'nepodílím se'}</small>
     </div>`;
     })
     .join('');
@@ -375,6 +385,7 @@ h2 { font-size: 15px; margin: 0 0 8px; }
 .polozka .nazev { font-weight: 550; }
 .polozka small { color: var(--tlumene); font-size: 12.5px; }
 .polozka small.moje { color: var(--akcent); font-weight: 600; }
+.polozka .jednotka { color: var(--tlumene); font-weight: 400; font-size: 11.5px; }
 .paticka { color: var(--tlumene); font-size: 12px; text-align: center; }
 
 /* měsíc po měsíci — dva sloupce: co měl poslat a co přišlo */
@@ -581,12 +592,16 @@ h2 { font-size: 15px; margin: 0 0 8px; }
       </div>
       <p class="pozn">Tolik stojí provoz domu za rok — bez ohledu na to, kdo se na čem podílí.</p>
       ${radkyKategorii}
-      <h2 style="margin-top:16px">Z čeho se to skládá</h2>
+      <h2 style="margin-top:16px">Z čeho se to skládá — měsíčně</h2>
       <div class="rozpis" style="margin-bottom:6px">
         <span class="soucet">Můj podíl měsíčně</span><span class="cislo soucet">${formatKc(mujMesicne)}</span>
       </div>
       ${polozkyDomu}
-      <p class="pozn">Částky jsou měsíční; roční jsou dvanáctinásobek.</p>
+      <p class="pozn">
+        Všechny částky v tomhle seznamu jsou <b>měsíční</b>. Co se platí jednou za čtvrt
+        roku nebo za rok, je přepočítané na měsíc — u takové položky je vidět i původní
+        faktura, ať se dá zkontrolovat. Roční částky nahoře jsou dvanáctinásobek.
+      </p>
     </section>
   </aside>
 
