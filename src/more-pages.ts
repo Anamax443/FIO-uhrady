@@ -192,6 +192,7 @@ const STYL_PREHLED = `
 .stav-kredit { text-align: right; font-family: var(--mono); font-weight: 650; }
 .stav-kredit.plus { color: var(--ok); }
 .stav-kredit.minus { color: var(--crit); }
+.stav-kredit .tlumene { color: var(--text-dim); }
 .stav-kredit small { display: block; font-weight: 400; font-family: var(--ui); font-size: 10.5px; color: var(--text-faint); }
 .ai { border-bottom: 1px solid var(--border); }
 .ai .telo-ai { padding: 10px 12px 13px; display: flex; flex-direction: column; gap: 7px; max-width: 82ch; }
@@ -218,12 +219,20 @@ function grafKdoKolik(radky: RadekVyrovnani[], mesicu: number): string {
 
   const radek = (r: RadekVyrovnani): string => {
     const kredit = r.zaplaceno - r.skutecne;
-    const ukazatKredit = r.sledovat || kredit > 0;
-    const stav = !ukazatKredit
-      ? '<span class="stav-kredit"><small>nesleduje se</small></span>'
-      : `<span class="stav-kredit ${kredit > 0 ? 'plus' : kredit < 0 ? 'minus' : ''}">${formatKc(
-          Math.abs(kredit),
-        )}<small>${kredit > 0 ? 'má k dobru' : kredit < 0 ? 'chybí' : 'vyrovnáno'}</small></span>`;
+    // U toho, od koho příspěvky nechodí na účet, se dluh nesleduje — skládá se
+    // jinak a narůstající číslo by nic neznamenalo. Když ale reálné peníze dal
+    // (nákup ze svého), je potřeba ukázat aspoň obě čísla; jinak u něj svítí
+    // holé „nesleduje se" a nikdo nepozná, jestli je v plusu, nebo v mínusu.
+    const stav =
+      r.sledovat || kredit > 0
+        ? `<span class="stav-kredit ${kredit > 0 ? 'plus' : kredit < 0 ? 'minus' : ''}">${formatKc(
+            Math.abs(kredit),
+          )}<small>${kredit > 0 ? 'má k dobru' : kredit < 0 ? 'chybí' : 'vyrovnáno'}</small></span>`
+        : r.zaplaceno > 0
+          ? `<span class="stav-kredit"><span class="tlumene">${formatKc(r.zaplaceno)}</span><small>vložil${
+              r.osoba.rod === 'zena' ? 'a' : r.osoba.rod === 'muz' ? '' : 'o se'
+            } z podílu ${formatKc(r.skutecne)} — dluh se nesleduje</small></span>`
+          : '<span class="stav-kredit"><small>nesleduje se</small></span>';
 
     return `<div class="osoba-radek">
       <span class="kdo">${esc(r.osoba.jmeno)}${

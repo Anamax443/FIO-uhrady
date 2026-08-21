@@ -3,7 +3,7 @@
 > Kde to stojí **dnes**. Historie a rozhodnutí jsou v [HANDOFF.md](../HANDOFF.md),
 > tenhle dokument se přepisuje. Anglicky: [STATUS.en.md](STATUS.en.md).
 
-**Stav k 2026-08-21 · živě `4207e8d` · <https://fio-uhrady.bass443.workers.dev>**
+**Stav k 2026-08-21 · živě `523711c` · <https://fio-uhrady.bass443.workers.dev>**
 
 ## K čemu to je
 
@@ -58,13 +58,6 @@ srovná zálohy se skutečností.
    ale všechno. Kontrola: vytáhnout `<script>` ze stránky a pustit `node --check`.
 4. **Fio API vrací i HTTP 500**, když je na jejich straně výpadek. Není to
    chyba tokenu; `periods/` se stahuje za celé období, takže další běh výpadek dožene.
-
-## Čeká na uživatele
-
-- **Stočné → Zaplaceno z = vlastní kapsy.** Děda ho platí ze svého, ale položka
-  má nastavený účet domácnosti, takže se mu 967 Kč měsíčně nepřipisuje jako vklad
-  (rozdíl proti jeho podílu je 580 Kč měsíčně). Mění se v aplikaci, ne přes SQL —
-  přes databázi by změna neměla auditní stopu.
 
 ## Kudy dál
 

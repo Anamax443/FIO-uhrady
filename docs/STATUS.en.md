@@ -4,7 +4,7 @@
 > [HANDOFF.md](../HANDOFF.md); this document gets rewritten.
 > Czech original: [STAV.md](STAV.md).
 
-**As of 2026-08-21 · live `4207e8d` · <https://fio-uhrady.bass443.workers.dev>**
+**As of 2026-08-21 · live `523711c` · <https://fio-uhrady.bass443.workers.dev>**
 
 ## What it is for
 
@@ -62,13 +62,6 @@ fixed advances against reality.
    and running `node --check`.
 4. **Fio's API also returns HTTP 500** during outages on their side. It is not a
    token problem; `periods/` fetches the whole window, so the next run catches up.
-
-## Waiting on the owner
-
-- **Sewerage → "paid from" = own pocket.** Grandpa pays it himself, but the item is
-  set to the household account, so the 967 CZK per month is not credited to him as a
-  deposit (580 CZK a month more than his own share). It has to be changed in the
-  application, not via SQL — a database change would leave no audit trail.
 
 ## What comes next
 

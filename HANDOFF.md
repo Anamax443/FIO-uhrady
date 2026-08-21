@@ -2,6 +2,24 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — proč máma neměla kredit
+
+Dotaz od uživatele nad novým grafem: proč u mámy svítí „nesleduje se", když
+děda má k dobru 7 205 Kč. Ověřeno proti ostré databázi — **máma platí ze svého
+hodně** (drogerie, internet, Magenta, Netflix, odpady, pojištění, televize,
+VaK; dohromady ~3 809 Kč měsíčně), ale její podíl je 8 343 Kč měsíčně.
+Je tedy v mínusu, ne v plusu — a dluh se u toho, od koho příspěvky nechodí
+na účet, záměrně nesleduje.
+
+Chování je správné, **výstup byl špatný**: holé „nesleduje se" nedá poznat,
+jestli ten člověk nedal nic, nebo dal hodně a přesto nedosáhl na svůj podíl.
+Nově se u něj ukážou obě čísla — kolik vložil a kolik na něj připadlo — a text
+říká, že dluh se nesleduje. Kredit (kladný rozdíl) se ukazuje jako dřív.
+
+**Mimochodem:** ze stejného výpisu je vidět, že **stočné už `zdroj_uhrady = 'osoba'`
+má** — uživatel to v aplikaci přepnul, takže dřívější otevřený bod padá.
+Dědův kredit 7 205 Kč už ho zahrnuje.
+
 ## 2026-08-21 — AI vrstva, kdo má jaký kredit, a čitelné logy
 
 **AI vrstva** (`src/ai.ts`) podle stejného vzoru jako JobWatch a FIO-import:
