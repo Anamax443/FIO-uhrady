@@ -27,14 +27,15 @@ fixed advances against reality.
 | Monthly closings | ✅ | freeze what applied that month; **automatic** once the next month falls due |
 | Period settlement | ✅ | difference folded into the advance or left to pay; **automatic** once the period is complete |
 | Member's personal view | ✅ | `/v/{token}`, running balance, QR payment, wording from Settings |
-| Audit trail | ✅ | no write without a record; change and record in a single batch |
+| Audit trail and change history | ✅ | no write without a record; its own page showing old → new values |
+| AI layer | ✅ | switchable backend (free Workers AI × Claude), commentary on cost trends |
 | Sign-in | ✅ | PIN (PBKDF2 + lockout); Cloudflare Access takes precedence |
 
 ## What is not there yet
 
 | Missing | Why it is not blocking |
 |---|---|
-| **AI** — reading receipts, commentary on cost trends | nice to have, last item on the plan |
+| **AI — reading receipts** | the layer and the trend commentary are done; only receipt OCR is left |
 | **E-mail (Resend)** | the settlement is shown in the app and on the personal link |
 | **CSV import** | export works; nobody has needed import yet |
 | **Cloudflare Access instead of the PIN** | the PIN works; Access is a planned swap |
@@ -71,7 +72,7 @@ fixed advances against reality.
 
 ## What comes next
 
-1. **AI** — turning receipts into items, commentary on how costs develop.
+1. **Reading receipts** — a photo straight into a cost item; the AI layer is ready for it.
 2. **E-mail** via Resend — settlement sent to members.
 3. **Cloudflare Access** replacing the PIN.
 4. **CSV import** back into the application.

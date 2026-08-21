@@ -173,12 +173,96 @@ const STYL_PREHLED = `
 .blok { border-bottom: 1px solid var(--border); }
 .odkazy { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
 .odkazy a { text-decoration: none; }
+/* Kdo kolik — vodorovné pruhy. Číslo v tabulce se dá přečíst, ale poměr
+   mezi lidmi je z pruhu vidět na první pohled. */
+.kdokolik { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 11px; max-width: 900px; }
+.osoba-radek { display: grid; grid-template-columns: 132px minmax(0, 1fr) 108px; gap: 3px 12px; align-items: center; font-variant-numeric: tabular-nums; }
+.osoba-radek .kdo { font-weight: 600; }
+.osoba-radek .kdo small { display: block; font-weight: 400; color: var(--text-faint); font-size: 11px; }
+.pruhy { display: flex; flex-direction: column; gap: 3px; }
+.pruh { position: relative; height: 13px; background: var(--chrome); border-radius: 2px; overflow: hidden; }
+.pruh i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; }
+.pruh.podil i { background: var(--accent); opacity: .85; }
+.pruh.zaloha i { background: var(--ok); opacity: .7; }
+.legenda-pruhu { display: flex; gap: 14px; flex-wrap: wrap; color: var(--text-faint); font-size: 11px; padding-left: 144px; }
+.legenda-pruhu span { display: flex; align-items: center; gap: 5px; }
+.legenda-pruhu i { width: 11px; height: 9px; border-radius: 2px; display: inline-block; }
+.castky { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
+.castky b { color: var(--text); }
+.stav-kredit { text-align: right; font-family: var(--mono); font-weight: 650; }
+.stav-kredit.plus { color: var(--ok); }
+.stav-kredit.minus { color: var(--crit); }
+.stav-kredit small { display: block; font-weight: 400; font-family: var(--ui); font-size: 10.5px; color: var(--text-faint); }
 .ai { border-bottom: 1px solid var(--border); }
 .ai .telo-ai { padding: 10px 12px 13px; display: flex; flex-direction: column; gap: 7px; max-width: 82ch; }
 .ai .shrnuti { font-size: 14px; font-weight: 600; }
 .ai ul { margin: 0; padding-left: 19px; display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); }
 .ai .radek-ai { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 </style>`;
+
+/**
+ * Kdo kolik — co na koho měsíčně padá, kolik na to posílá a jak je na tom
+ * proti skutečnosti.
+ *
+ * Poslední sloupec je **kredit proti skutečným nákladům**: co člověk do
+ * domácnosti dal minus to, co na něj za sledované období připadlo. Kladné
+ * číslo znamená, že domácnost dluží jemu — a platí to i pro toho, kdo na účet
+ * neposílá a jen zaplatil nákup ze svého. Dluh se u nesledovaných záměrně
+ * neukazuje: skládají se jinak a narůstající číslo by nic neznamenalo.
+ */
+function grafKdoKolik(radky: RadekVyrovnani[], mesicu: number): string {
+  if (radky.length === 0) return '';
+  // Měřítko drží největší z obou veličin, ať jsou pruhy porovnatelné mezi lidmi.
+  const max = Math.max(...radky.flatMap((r) => [r.mesicne, r.zaloha]), 1);
+  const sirka = (v: number): number => Math.max(v > 0 ? 2 : 0, Math.round((v / max) * 100));
+
+  const radek = (r: RadekVyrovnani): string => {
+    const kredit = r.zaplaceno - r.skutecne;
+    const ukazatKredit = r.sledovat || kredit > 0;
+    const stav = !ukazatKredit
+      ? '<span class="stav-kredit"><small>nesleduje se</small></span>'
+      : `<span class="stav-kredit ${kredit > 0 ? 'plus' : kredit < 0 ? 'minus' : ''}">${formatKc(
+          Math.abs(kredit),
+        )}<small>${kredit > 0 ? 'má k dobru' : kredit < 0 ? 'chybí' : 'vyrovnáno'}</small></span>`;
+
+    return `<div class="osoba-radek">
+      <span class="kdo">${esc(r.osoba.jmeno)}${
+        r.zastupuje.length ? `<small>nese i ${esc(r.zastupuje.join(', '))}</small>` : ''
+      }</span>
+      <div class="pruhy">
+        <div class="pruh podil" title="Měsíční podíl na nákladech: ${formatKc(r.mesicne)}"><i style="width:${sirka(
+          r.mesicne,
+        )}%"></i></div>
+        <div class="pruh zaloha" title="Záloha na trvalý příkaz: ${formatKc(r.zaloha)}"><i style="width:${sirka(
+          r.zaloha,
+        )}%"></i></div>
+        <span class="castky">měl by platit <b>${formatKc(r.mesicne)}</b> · posílá ${
+          r.zaloha === 0 ? '—' : formatKc(r.zaloha)
+        }</span>
+      </div>
+      ${stav}
+    </div>`;
+  };
+
+  return `<section class="blok">
+    <div class="panehead"><svg class="icon icon-sm"><use href="#i-users"/></svg>Kdo kolik platí
+      <span class="count">kredit za ${mesicu} ${mesicu === 1 ? 'měsíc' : mesicu >= 2 && mesicu <= 4 ? 'měsíce' : 'měsíců'}</span>
+    </div>
+    <div class="kdokolik">
+      <div class="legenda-pruhu">
+        <span><i style="background: var(--accent); opacity: .85"></i> měsíční podíl na nákladech</span>
+        <span><i style="background: var(--ok); opacity: .7"></i> záloha na trvalý příkaz</span>
+      </div>
+      ${radky.map(radek).join('')}
+      <p class="vysvetleni note">
+        Vpravo je <b>kredit proti skutečnosti</b> — co člověk do domácnosti dal minus to,
+        co na něj za sledované období připadlo. Kladné číslo znamená, že domácnost dluží jemu;
+        počítá se do něj i nákup zaplacený z vlastní kapsy. U toho, od koho příspěvky nechodí
+        na účet, se dluh záměrně nesleduje, jen případný kredit.
+      </p>
+    </div>
+  </section>`;
+}
 
 /**
  * Komentář k vývoji nákladů od AI. Nepočítá se při každém načtení stránky —
@@ -282,6 +366,8 @@ export function renderPrehled(
         </table>
       </div>
     </section>
+
+    ${grafKdoKolik(radky, mesicu)}
 
     ${blokKomentare(nastaveni)}
 
@@ -621,41 +707,148 @@ document.querySelectorAll('[data-uloz]').forEach((tlacitko) => {
 
 /* ---------- Log synchronizace ---------- */
 
-export function renderLog(behy: Beh[], nazevDomu: string, kdo: string, commit: string): string {
+/**
+ * Po sobě jdoucí běhy, které dopadly úplně stejně, se slijí do jednoho řádku.
+ *
+ * Cron jede každých 15 minut, takže „Staženo 3 pohyby, nových 0" se za den
+ * zopakuje 96×. Bez seskupení se v logu nedá najít to jediné, co má cenu
+ * číst — běh, který dopadl jinak.
+ */
+export interface SkupinaBehu {
+  stav: string;
+  detail: string | null;
+  /** kolik běhů se slilo dohromady */
+  pocet: number;
+  /** nejnovější běh ve skupině */
+  posledni: string;
+  /** nejstarší běh ve skupině */
+  prvni: string;
+  /** kolik pohybů dohromady přibylo */
+  novych: number;
+}
+
+export function seskupBehy(behy: Beh[]): SkupinaBehu[] {
+  const skupiny: SkupinaBehu[] = [];
+  for (const b of behy) {
+    const posledniSkupina = skupiny[skupiny.length - 1];
+    // Slévá se jen to, co je opravdu totéž — jiný počet nových pohybů
+    // znamená jiný běh, i když stav i text sedí.
+    if (
+      posledniSkupina !== undefined &&
+      posledniSkupina.stav === b.stav &&
+      posledniSkupina.detail === (b.detail ?? null) &&
+      posledniSkupina.novych === b.novych * posledniSkupina.pocet
+    ) {
+      posledniSkupina.pocet += 1;
+      posledniSkupina.novych += b.novych;
+      posledniSkupina.prvni = b.zacatek;
+      continue;
+    }
+    skupiny.push({
+      stav: b.stav,
+      detail: b.detail ?? null,
+      pocet: 1,
+      posledni: b.zacatek,
+      prvni: b.zacatek,
+      novych: b.novych,
+    });
+  }
+  return skupiny;
+}
+
+export function renderLog(
+  behy: Beh[],
+  nazevDomu: string,
+  kdo: string,
+  commit: string,
+  souhrn: { celkem: number; stavy: Map<string, number> },
+  stav: string | null,
+  limit: number,
+): string {
+  const skupiny = seskupBehy(behy);
+  const jeVic = behy.length >= limit && behy.length < souhrn.celkem;
+
   const radky =
-    behy.length === 0
-      ? '<tr><td colspan="4" class="note">Zatím žádný běh. Stahování se spouští z Úhrad z Fio nebo automaticky každých 15 minut.</td></tr>'
-      : behy
+    skupiny.length === 0
+      ? `<tr><td colspan="4" class="note">${
+          stav
+            ? `Žádný běh se stavem „${esc(stav)}".`
+            : 'Zatím žádný běh. Stahování se spouští z Úhrad z Fio nebo automaticky každých 15 minut.'
+        }</td></tr>`
+      : skupiny
           .map(
-            (b) => `<tr>
-      <td class="mono" data-popis="Začátek">${esc(b.zacatek)}</td>
+            (g) => `<tr>
+      <td class="mono" data-popis="Kdy">${esc(g.posledni)}${
+        g.pocet > 1 ? `<small class="pozn">nejstarší ${esc(g.prvni)}</small>` : ''
+      }</td>
       <td data-popis="Stav"><span class="${
-        b.stav === 'chyba' ? 's-crit' : b.stav === 'ok' ? 's-ok' : ''
-      }"><span class="dot"></span>${esc(b.stav)}</span></td>
-      <td class="col-num" data-popis="Nových">${b.novych}</td>
-      <td data-popis="Podrobnost">${esc(b.detail ?? '')}</td>
+        g.stav === 'chyba' ? 's-crit' : g.stav === 'ok' ? 's-ok' : ''
+      }"><span class="dot"></span>${esc(g.stav)}</span>${
+        g.pocet > 1 ? ` <span class="pocetkrat">${g.pocet}×</span>` : ''
+      }</td>
+      <td class="col-num" data-popis="Nových">${g.novych}</td>
+      <td data-popis="Podrobnost">${esc(g.detail ?? '')}</td>
     </tr>`,
           )
           .join('');
 
-  const obsah = `<style>.main { display: block; overflow-y: auto; } td.mono { width: 150px; }</style>
+  const odkaz = (s: string | null, popis: string, pocet: number | null): string => {
+    const je = (stav ?? null) === s;
+    const q = s === null ? '' : `?stav=${encodeURIComponent(s)}`;
+    return `<a class="tbtn${je ? ' aktivni' : ''}" href="/admin/log${q}">${esc(popis)}${
+      pocet === null ? '' : ` (${pocet})`
+    }</a>`;
+  };
+
+  const obsah = `<style>
+.main { display: block; overflow-y: auto; }
+td.mono { width: 168px; }
+td.mono small { display: block; color: var(--text-faint); font-size: 10.5px; }
+.pocetkrat { font-family: var(--mono); color: var(--text-dim); font-size: 11px; }
+.filtry-log { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--chrome-hi); flex-wrap: wrap; }
+.filtry-log .tbtn { text-decoration: none; }
+.filtry-log .tbtn.aktivni { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.filtry-log .spacer { flex: 1; }
+.vic { padding: 9px 10px; }
+.vic a { text-decoration: none; }
+</style>
   <div>
-    <div class="panehead"><svg class="icon icon-sm"><use href="#i-log"/></svg>Log synchronizace<span class="count">${behy.length} běhů</span></div>
+    <div class="panehead"><svg class="icon icon-sm"><use href="#i-log"/></svg>Log synchronizace
+      <span class="count">${skupiny.length} ${
+        skupiny.length === 1 ? 'záznam' : skupiny.length >= 2 && skupiny.length <= 4 ? 'záznamy' : 'záznamů'
+      } z ${behy.length} běhů</span>
+    </div>
+    <div class="filtry-log">
+      ${odkaz(null, 'vše', souhrn.celkem)}
+      ${[...souhrn.stavy.entries()].map(([s, p]) => odkaz(s, s, p)).join('')}
+      <span class="spacer"></span>
+      <span class="note">Stejné běhy po sobě jsou slité do jednoho řádku — cron jede každých 15 minut.</span>
+    </div>
     <div class="gridwrap">
       <table>
-        <thead><tr><th>Začátek</th><th>Stav</th><th class="col-num">Nových</th><th>Podrobnost</th></tr></thead>
+        <thead><tr><th>Kdy</th><th>Stav</th><th class="col-num">Nových</th><th>Podrobnost</th></tr></thead>
         <tbody>${radky}</tbody>
       </table>
     </div>
+    ${
+      jeVic
+        ? `<div class="vic"><a class="btn" href="/admin/log?${
+            stav ? `stav=${encodeURIComponent(stav)}&` : ''
+          }limit=${limit * 4}">Načíst starší (zatím ${behy.length} z ${souhrn.celkem})</a></div>`
+        : `<div class="vic note">Načtené jsou všechny běhy${stav ? ` se stavem „${esc(stav)}"` : ''}.</div>`
+    }
   </div>`;
 
+  const chyb = souhrn.stavy.get('chyba') ?? 0;
   return shell({
     aktivni: 'log',
     nazevDomu,
     titulek: 'Log synchronizace',
     commit,
     obsah,
-    status: `<span>běhů <b>${behy.length}</b></span><span>chybných <b>${behy.filter((b) => b.stav === 'chyba').length}</b></span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
+    status: `<span>běhů celkem <b>${souhrn.celkem}</b></span><span${
+      chyb > 0 ? ' class="warn"' : ''
+    }>chybných <b>${chyb}</b></span><span>zobrazeno <b>${skupiny.length}</b> záznamů</span><span class="spacer"></span><span>přihlášen: ${esc(kdo)}</span>`,
   });
 }
 

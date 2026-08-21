@@ -627,14 +627,31 @@ export async function platbyOsoby(db: D1Database, member_id: number, limit = 50)
   return results;
 }
 
-export async function nactiBehy(db: D1Database, limit = 50): Promise<Beh[]> {
-  const { results } = await db
-    .prepare(
-      'select zacatek, konec, stav, detail, novych, sparovanych from sync_runs order by id desc limit ?',
-    )
-    .bind(limit)
-    .all<Beh>();
+export async function nactiBehy(db: D1Database, limit = 200, stav?: string): Promise<Beh[]> {
+  const filtr = stav ? 'where stav = ?' : '';
+  const dotaz = db.prepare(
+    `select zacatek, konec, stav, detail, novych, sparovanych from sync_runs
+       ${filtr} order by id desc limit ?`,
+  );
+  const { results } = await (stav ? dotaz.bind(stav, limit) : dotaz.bind(limit)).all<Beh>();
   return results;
+}
+
+/**
+ * Kolik běhů kterého stavu vůbec je.
+ *
+ * Cron běží každých 15 minut, takže se log rychle zaplní stovkami stejných
+ * řádků. Bez tohohle součtu by nešlo poznat, jestli se dívám na celý log,
+ * nebo na jeho začátek — a hlavně jestli tam někde vzadu není chyba.
+ */
+export async function souhrnBehu(db: D1Database): Promise<{ celkem: number; stavy: Map<string, number> }> {
+  const { results } = await db
+    .prepare('select stav, count(*) as pocet from sync_runs group by stav order by pocet desc')
+    .all<{ stav: string; pocet: number }>();
+  const stavy = new Map(results.map((r) => [r.stav, r.pocet]));
+  let celkem = 0;
+  for (const p of stavy.values()) celkem += p;
+  return { celkem, stavy };
 }
 
 export async function nactiPrehled(db: D1Database): Promise<Prehled> {
@@ -733,14 +750,35 @@ export async function ulozNastaveniTise(db: D1Database, klic: string, hodnota: s
     .run();
 }
 
-/** Uloží jednu položku nastavení a zapíše, kdo ji změnil. */
+/**
+ * Uloží jednu položku nastavení a zapíše, kdo ji změnil.
+ *
+ * Do auditu jde i **stará hodnota** — jinak by v historii bylo vidět jen to,
+ * že se něco změnilo, ne z čeho na co. Kvůli tomu se nejdřív přečte současný
+ * stav; je to jeden dotaz navíc a stojí za to.
+ */
 export async function ulozNastaveni(
   db: D1Database,
   klic: string,
   hodnota: string,
   kdo: string,
   popis: string,
+  /**
+   * Nezapisovat hodnotu do auditu, jen fakt, že se změnila.
+   * Pro velké generované obsahy (komentář od AI), které by historii zaplevelily.
+   */
+  bezHodnoty = false,
 ): Promise<void> {
+  const stara = await db
+    .prepare('select hodnota from settings where klic = ?')
+    .bind(klic)
+    .first<{ hodnota: string }>();
+
+  if (stara?.hodnota === hodnota) return;
+
+  const zkrat = (v: string | null): string | null =>
+    v === null ? null : v.length > 120 ? v.slice(0, 119) + '…' : v;
+
   await db.batch([
     db
       .prepare(
@@ -749,7 +787,16 @@ export async function ulozNastaveni(
               changed_at = excluded.changed_at, changed_by = excluded.changed_by`,
       )
       .bind(klic, hodnota, kdo),
-    auditStatement(db, kdo, 'zmena', 'nastaveni', klic, popis, null, { klic, hodnota }),
+    auditStatement(
+      db,
+      kdo,
+      'zmena',
+      'nastaveni',
+      klic,
+      popis,
+      bezHodnoty ? { klic } : { klic, hodnota: zkrat(stara?.hodnota ?? null) },
+      bezHodnoty ? { klic } : { klic, hodnota: zkrat(hodnota) },
+    ),
   ]);
 }
 
@@ -897,19 +944,44 @@ export async function priradPlatbu(
   ]);
 }
 
-export async function nactiAudit(db: D1Database, limit = 50) {
-  const { results } = await db
-    .prepare('select cas, kdo, akce, entita, entita_id, popis from audit_log order by id desc limit ?')
-    .bind(limit)
-    .all<{
-      cas: string;
-      kdo: string;
-      akce: string;
-      entita: string;
-      entita_id: string | null;
-      popis: string;
-    }>();
+export interface ZaznamAuditu {
+  cas: string;
+  kdo: string;
+  akce: string;
+  entita: string;
+  entita_id: string | null;
+  popis: string;
+  /** JSON stavu před změnou; null u vytvoření */
+  pred: string | null;
+  /** JSON stavu po změně; null u smazání */
+  po: string | null;
+}
+
+export async function nactiAudit(
+  db: D1Database,
+  limit = 50,
+  entita?: string,
+): Promise<ZaznamAuditu[]> {
+  const filtr = entita ? 'where entita = ?' : '';
+  const dotaz = db.prepare(
+    `select cas, kdo, akce, entita, entita_id, popis, pred, po from audit_log
+       ${filtr} order by id desc limit ?`,
+  );
+  const { results } = await (entita ? dotaz.bind(entita, limit) : dotaz.bind(limit)).all<ZaznamAuditu>();
   return results;
+}
+
+/** Kolik záznamů které entity — pro filtry nad historií. */
+export async function souhrnAuditu(
+  db: D1Database,
+): Promise<{ celkem: number; entity: Map<string, number> }> {
+  const { results } = await db
+    .prepare('select entita, count(*) as pocet from audit_log group by entita order by pocet desc')
+    .all<{ entita: string; pocet: number }>();
+  const entity = new Map(results.map((r) => [r.entita, r.pocet]));
+  let celkem = 0;
+  for (const p of entity.values()) celkem += p;
+  return { celkem, entity };
 }
 
 export interface ZmenaPolozky {

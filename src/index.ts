@@ -42,6 +42,8 @@ import {
   ulozObdobiPlatby,
   ulozOsobu,
   nactiBehy,
+  souhrnBehu,
+  souhrnAuditu,
   nactiUzaverky,
   nactiVyuctovani,
   nactiZalohy,
@@ -66,6 +68,7 @@ import {
   vyuctovatelneMesice,
 } from './settlement-page.js';
 import { renderDokumentace } from './docs-page.js';
+import { renderHistorie } from './history-page.js';
 import { proQr, renderClen } from './member-page.js';
 import { jeKlicTextu } from './texty.js';
 import {
@@ -621,9 +624,32 @@ export default {
           return json({ ok: true });
         }
 
+        if (request.method === 'GET' && path === '/admin/historie') {
+          const entita = url.searchParams.get('entita');
+          const limit = Math.min(5000, Math.max(50, Number(url.searchParams.get('limit') ?? '200') || 200));
+          const [zaznamy, nastaveni, souhrn] = await Promise.all([
+            nactiAudit(env.DB, limit, entita ?? undefined),
+            nactiNastaveni(env.DB),
+            souhrnAuditu(env.DB),
+          ]);
+          return html(
+            renderHistorie(zaznamy, souhrn, entita, limit, nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'),
+          );
+        }
+
         if (request.method === 'GET' && path === '/admin/log') {
-          const [behy, nastaveni] = await Promise.all([nactiBehy(env.DB), nactiNastaveni(env.DB)]);
-          return html(renderLog(behy, nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev'));
+          const stav = url.searchParams.get('stav');
+          // Strop je schválně vysoký: cron jede každých 15 minut, takže i 200 běhů
+          // jsou jen dva dny. Seskupení je pak srazí na pár řádků.
+          const limit = Math.min(5000, Math.max(50, Number(url.searchParams.get('limit') ?? '200') || 200));
+          const [behy, nastaveni, souhrn] = await Promise.all([
+            nactiBehy(env.DB, limit, stav ?? undefined),
+            nactiNastaveni(env.DB),
+            souhrnBehu(env.DB),
+          ]);
+          return html(
+            renderLog(behy, nastaveni.nazev_domu, kdo, env.GIT_COMMIT ?? 'dev', souhrn, stav, limit),
+          );
         }
 
         if (request.method === 'GET' && path === '/admin/o-aplikaci') {
@@ -788,6 +814,9 @@ export default {
             ulozit,
             kdo,
             `Spočítán komentář k vývoji nákladů (${popisBackendu(vysledek.backend)})`,
+            // Text komentáře do historie nepatří — je dlouhý a mění se při
+            // každém přepočtu, takže by ostatní změny zavalil.
+            true,
           );
           return json({ ok: true, backend: vysledek.backend });
         }

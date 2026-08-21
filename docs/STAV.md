@@ -25,14 +25,15 @@ srovná zálohy se skutečností.
 | Měsíční uzávěrky | ✅ | zamrazí, co v měsíci platilo; **automaticky** po splatnosti dalšího měsíce |
 | Vyúčtování období | ✅ | rozdíl do zálohy nebo k doplacení; **automaticky** po naplnění období |
 | Osobní přehled pro člena | ✅ | `/v/{token}`, průběžný zůstatek, QR platba, texty z Nastavení |
-| Audit | ✅ | žádný zápis bez záznamu; změna i záznam jednou dávkou |
+| Audit a historie změn | ✅ | žádný zápis bez záznamu; vlastní stránka se starou → novou hodnotou |
+| AI vrstva | ✅ | přepínatelný backend (zdarma Workers AI × Claude), komentář k vývoji nákladů |
 | Přihlášení | ✅ | PIN (PBKDF2 + zámek po chybách); Cloudflare Access má přednost |
 
 ## Co ještě není
 
 | Chybí | Proč to není blokující |
 |---|---|
-| **AI** — čtení účtenek, komentář k vývoji | příjemné, ne nutné; poslední bod plánu |
+| **AI — čtení účtenek** | vrstva i komentář k vývoji hotové; zbývá jen OCR účtenek |
 | **E-maily (Resend)** | vyúčtování se dnes ukazuje v appce a na osobním odkazu |
 | **Import CSV** | export funguje, import zatím nikdo nepotřeboval |
 | **Cloudflare Access místo PINu** | PIN je funkční záloha, Access je hotový plán |
@@ -67,7 +68,7 @@ srovná zálohy se skutečností.
 
 ## Kudy dál
 
-1. **AI** — čtení účtenek do položek, komentář k vývoji nákladů.
+1. **Čtení účtenek** — z fotky rovnou položka; AI vrstva už na to je připravená.
 2. **E-maily** přes Resend — vyúčtování na e-mail členům.
 3. **Cloudflare Access** místo PINu.
 4. **Import CSV** zpátky do aplikace.

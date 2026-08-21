@@ -247,7 +247,7 @@ export const SYMBOLY = `
 
 type Stranka =
   | 'prehled' | 'naklady' | 'osoby' | 'uhrady' | 'vyrovnani' | 'uzaverky' | 'vyuctovani'
-  | 'nastaveni' | 'log' | 'dokumentace' | 'oapp';
+  | 'nastaveni' | 'log' | 'historie' | 'dokumentace' | 'oapp';
 
 interface Polozka {
   klic: Stranka | null;
@@ -269,6 +269,7 @@ const MENU: Polozka[] = [
 const MENU_SPRAVA: Polozka[] = [
   { klic: 'nastaveni', href: '/admin/nastaveni', ikona: 'i-gear', popis: 'Nastavení' },
   { klic: 'log', href: '/admin/log', ikona: 'i-log', popis: 'Log synchronizace' },
+  { klic: 'historie', href: '/admin/historie', ikona: 'i-doc', popis: 'Historie změn' },
   { klic: 'dokumentace', href: '/admin/dokumentace', ikona: 'i-doc', popis: 'Dokumentace' },
   { klic: 'oapp', href: '/admin/o-aplikaci', ikona: 'i-info', popis: 'O aplikaci' },
 ];

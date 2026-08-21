@@ -2,6 +2,43 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-21 — AI vrstva, kdo má jaký kredit, a čitelné logy
+
+**AI vrstva** (`src/ai.ts`) podle stejného vzoru jako JobWatch a FIO-import:
+přepínač backendu v Nastavení — automaticky (zdarma Workers AI), jen zdarma,
+placený Claude, nebo vypnuto. **Appka sama od sebe nikdy neutrácí**; placené
+volání nastane jen při výslovné volbě, nebo kdyby free binding vůbec chyběl.
+
+První funkce nad tím je **komentář k vývoji nákladů** na Přehledu. Spouští ho
+člověk tlačítkem, ne každé načtení stránky, a modelu jdou **jen náklady domu** —
+žádná jména, čísla účtů ani platby.
+
+**Čísla nepočítá model.** Součty i procenta spočítá aplikace a předá je hotová.
+Při zkoušce free model sečetl kategorii Energie s uhlím, které do té kategorie
+patří, a vyrobil nesmyslné procento. Kromě předpočítaných čísel proto platí
+tvrdá pojistka: **věta s číslem, které v podkladu není, se nepublikuje**
+(`jenOverenaCisla`). Ověřeno — procenta v komentáři sedí na tabulku
+(8 000 / 14 126 = 57 %, Energie 86 %, pojištění 54 % kategorie).
+
+**Kdo kolik platí** — na Přehledu přibyl pruhový graf: co na koho měsíčně padá,
+kolik na to posílá zálohou, a hlavně **kredit proti skutečnosti** (co dal minus
+co na něj připadlo). Díky tomu je konečně vidět, že děda má k dobru 2 163 Kč za
+uhlí ze svého. U toho, od koho příspěvky nechodí, se ukazuje jen kredit, ne dluh —
+drží se dřívější rozhodnutí, že narůstající dluh by u nich nic neznamenal.
+
+**Log synchronizace byl nečitelný** — cron jede každých 15 minut, takže „Staženo
+3 pohyby, nových 0" se za den zopakuje 96×. Po sobě jdoucí stejné běhy se teď
+slévají do jednoho řádku (`seskupBehy`), nahoře jsou filtry podle stavu s počty
+a starší se dotahují tlačítkem. Ověřeno na 41 bězích: srazily se na 6 řádků,
+filtr „chyba" najde 2.
+
+**Historie změn dostala vlastní stránku** (`/admin/historie`) ve stejném gardu:
+filtry podle entity, slévání, načítání starších — a hlavně **stará → nová
+hodnota** u každého pole. Kvůli tomu `ulozNastaveni` napřed přečte současnou
+hodnotu; dřív se do auditu zapisovala jen ta nová, takže z historie nešlo
+vyčíst, z čeho se měnilo. Dlouhý generovaný text (komentář od AI) se do auditu
+neukládá, jen fakt, že se přepočítal — jinak by ostatní změny zavalil.
+
 ## 2026-08-21 — detail položky: čím se dělí a kde je Uložit
 
 Pokračování dotazu na stočné. Popisek **„Měsíčně z toho: 967 Kč"** byl v detailu
